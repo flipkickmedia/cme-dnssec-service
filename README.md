@@ -12,13 +12,15 @@ These scripts monitor the bind logs for CDS and KSK publishing and updates the D
 
 To use, extract the files to somewhere safe on your DNS server, `/usr/local/sbin` is a good place, and run `monitor.sh` script before starting named.
 
+![DNSVIS flipkick.media](./dnsvis.png)
+
 ## CME
 
 This forms part of the CME system from flipkick.media
 
 ## Copyright Notice
 
-©2022 flipkic.kmedia Ltd - All Rights Reserved
+©2022 flipkick.media Ltd - All Rights Reserved
 
 ## Licence
 
