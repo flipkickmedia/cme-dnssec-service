@@ -1,0 +1,14 @@
+[Unit]
+Description=BindDNSECMonitor
+RequiredBy=named.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c /usr/local/sbin/bind-dnssec-monitor.sh
+TimeoutStopSec=20
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
