@@ -21,6 +21,15 @@ systemctl start bind-dnssec-monitor.service
 systemctl restart named
 ```
 
+If you do a
+```
+ps -ef | grep bash
+```
+You should see
+```
+
+```
+
 
 , and run `monitor.sh` script before starting named.
 
