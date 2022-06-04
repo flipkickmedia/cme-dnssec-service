@@ -2,7 +2,7 @@
 
 ## Overview
 
-Some scripts to manage DNSSEC on bind to work with CDS keys.
+Some scripts to manage DNSSEC on BIND v9.18.1 to work with DNSSEC DS/CDS keys.
 
 ## Description
 
@@ -10,7 +10,19 @@ To keep DNS secure https://datatracker.ietf.org/doc/html/rfc8078 provides a mean
 
 These scripts monitor the bind logs for CDS and KSK publishing and updates the DS records accordingly.
 
-To use, extract the files to somewhere safe on your DNS server, `/usr/local/sbin` is a good place, and run `monitor.sh` script before starting named.
+## Installation
+To use, extract the files to somewhere safe on your DNS server, `/usr/local/sbin` is a good place
+
+```
+git clone ssh://git.flipkick.media/cme/cme-bind-dnssec /usr/local/sbin/cme-bind-dnssec
+cp /usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.service /etc/systemd/system/
+systemctl enable bind-dnssec-monitor.service
+systemctl start bind-dnssec-monitor.service
+systemctl restart named
+```
+
+
+, and run `monitor.sh` script before starting named.
 
 ![DNSVIS flipkick.media](./dnsvis.png)
 
