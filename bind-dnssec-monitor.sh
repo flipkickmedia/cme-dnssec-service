@@ -8,15 +8,19 @@ DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 function trap_exit() {
-  logger "terminating monitor on PID:$monitor_pid"
-  kill -1 $monitor_pid
+  if [[ -n $monitor_pid ]]; then
+    logger "terminating monitor on PID:$monitor_pid"
+    kill -15 $monitor_pid
+  fi
 }
 
-trap "trap_exit" SIGINT SIGKILL SIGTERM SIGSTOP 15
-clear
+trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 alias logger='logger ${LOGGER_FLAGS}'
 logger "flags: ${LOGGER_FLAGS}"
+
 #add interfaces for access to views
+ip a a 10.0.254.2 dev eno1
+ip a a 10.0.254.1 dev eno1
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
@@ -68,5 +72,3 @@ tail -n0 -f $files | stdbuf -oL grep '.*' |
       fi
     fi
   done
-
-wait "${monitor_pid}"

@@ -1,15 +1,18 @@
 [Unit]
-Description=BindDNSECMonitor
+Description=BindDNSSECMonitor
 Before=named.service
 
 [Service]
-Type=simple
-ExecStart=/usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.sh
+Type=process
+ExecStart=/usr/local/sbin/cme-bind-dnssec/dnssec-monitor.sh
 KillSignal=15
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
 KillMode=control-group
 Restart=on-failure
 Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag bind-dnssec-monitor"
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=cme-dnssec-monitor
 
 [Install]
 WantedBy=multi-user.target
