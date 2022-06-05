@@ -20,7 +20,6 @@ if [[ $1 == '--clean' ]]; then
   }
 
   trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
-  log "clean flags: ${LOGGER_FLAGS}"
 
   shopt -s extglob
   while (true); do
