@@ -5,9 +5,9 @@ Before=named.service
 [Service]
 Type=simple
 ExecStart=/usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.sh
-TimeoutStopSec=20
+KillSignal=15
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
-KillMode=process
+KillMode=control-group
 Restart=on-failure
 Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag bind-dnssec-monitor"
 

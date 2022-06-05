@@ -12,7 +12,7 @@ function trap_exit() {
   kill -1 $monitor_pid
 }
 
-trap "trap_exit" EXIT SIGINT SIGKILL SIGTERM SIGSTOP
+trap "trap_exit" SIGINT SIGKILL SIGTERM SIGSTOP 15
 clear
 alias logger='logger ${LOGGER_FLAGS}'
 logger "flags: ${LOGGER_FLAGS}"
