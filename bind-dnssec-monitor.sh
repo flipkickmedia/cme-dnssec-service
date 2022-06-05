@@ -36,7 +36,7 @@ if [[ $1 == '--clean' ]]; then
     sleep 5
   done
 fi
-/bin/bash -c ./bind-dnssec-monitor.sh --clean &
+./bind-dnssec-monitor.sh --clean &
 monitor_pid=$!
 
 # main monitoring/update
