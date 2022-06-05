@@ -22,6 +22,10 @@ function parent_domain() {
   echo $parent
 }
 
+function log() {
+  /usr/bin/logger ${LOGGER_FLAGS} "$@"
+}
+
 DATA_PATH="${DATA_PATH:-/var/cache/bind}"
 KEY_PATH="${KEY_PATH:-${DATA_PATH}/keys}"
 DOMAIN=${DOMAIN:-$1}
