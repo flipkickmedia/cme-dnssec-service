@@ -57,7 +57,7 @@ for i in ${!RNDC_KEYS[@]}; do
   if [[ $cds == "" ]]; then
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
     logger "running nsupdate for $key"
-    if $CME_DNSSEC_MONITOR_DEBUG -eq 1; then
+    if [ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]; then
       cat <<EOF
 nsupdate -y hmac-sha512:${key}
 server ${NS_SERVER}
