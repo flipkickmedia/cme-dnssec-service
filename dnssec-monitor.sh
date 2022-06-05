@@ -90,5 +90,5 @@ logger "monitoring $files for CDS updates"
       fi
     fi
   done &
-tail_pid=$(<pid)
+tail_pid=$(<tail_pid)
 wait $tail_pid
