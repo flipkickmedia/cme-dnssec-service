@@ -44,5 +44,6 @@ $(cat ./nsup)
 send
 EOF
 )
+rm nsup
 done
 

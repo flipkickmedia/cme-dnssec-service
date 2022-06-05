@@ -3,62 +3,64 @@
 # monitor.sh
 # monitor named log output for CDS published string
 # run update.sh with domain
-
+DATA_PATH="/var/cache/bind"
+DSPROCESS_PATH="${DATA_PATH}/dsprocess"
+BIND_LOG_PATH="/var/log/named"
 function trap_exit() {
-    kill -1 $monitor_pid
+  kill -1 $monitor_pid
 }
 
-trap trap_exit EXIT
+trap trap_exit EXIT SIGTERM
 clear
+alias logger='logger ${LOGGER_FLAGS}'
+
+#add interfaces for access to views
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
-if [[ $1 == '--clean' ]];then
+if [[ $1 == '--clean' ]]; then
   shopt -s extglob
-  while (true);do
-    for dsprocess in /var/cache/bind/dsprocess/*.dsprocess; do
+  while (true); do
+    for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
       if [ ! -f "$dsprocess" ]; then
         sleep 5
         continue
       fi
-      if [[ $(date -r $dsprocess "+%s") -lt $(($(date +%s)-60)) ]];then
+      if [[ $(date -r $dsprocess "+%s") -lt $(($(date +%s) - 60)) ]]; then
         locked_domain=$(basename $dsprocess)
-        echo removing dsprocess lock for ${locked_domain//\.dsprocess/}
+        logger "removing dsprocess lock for ${locked_domain//\.dsprocess/}"
         rm $dsprocess
       fi
     done
-  sleep 5
+    sleep 5
   done
 fi
-./monitor.sh --clean &
+/bin/bash -c ./bind-dnssec-monitor.sh --clean &
 monitor_pid=$!
 
+# main monitoring/update
 
-# main monitoring/update 
-
-files=$(find /var/log/named -type f -not -name zone_transfers -not -name queries)
-echo monitoring $files for CDS updates
+files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queries)
+logger "monitoring $files for CDS updates"
 
 tail -n0 -f $files | stdbuf -oL grep '.*' |
-while IFS= read -r line 
-do
-  #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
-  if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<< "$line";then
-    domain=$(awk '{print $6}' <<< "${line//\// }")
-    echo KSK Published! domain:${domain}
-    if [[ ! -f ${domain}.dsprocess ]];then
-      touch /var/cache/bind/dsprocess/${domain}.dsprocess
-      ./add.sh ${domain}
+  while IFS= read -r line; do
+    #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
+    if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
+      domain=$(awk '{print $6}' <<<"${line//\// }")
+      logger "KSK Published! domain:${domain}"
+      if [[ ! -f ${domain}.dsprocess ]]; then
+        touch ${DSPROCESS_PATH}/${domain}.dsprocess
+        ./add.sh ${domain}
+      fi
     fi
- fi
 
-  #line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
-  if grep -P '.*info: CDS for key.*published.*' <<< "$line";then
-    domain=$(awk '{print $8}' <<< "${line//\// }")
-    echo CDS Published! domain:${domain}
-     if [[ ! -f ${domain}.dsprocess ]];then
-       touch /var/cache/bind/dsprocess/${domain}.dsprocess
-       ./update.sh ${domain}
-     fi
-  fi
-done
-
+    #line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
+    if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
+      domain=$(awk '{print $8}' <<<"${line//\// }")
+      logger "CDS Published! domain:${domain}"
+      if [[ ! -f ${domain}.dsprocess ]]; then
+        touch ${DSPROCESS_PATH}/${domain}.dsprocess
+        ./update.sh ${domain}
+      fi
+    fi
+  done
