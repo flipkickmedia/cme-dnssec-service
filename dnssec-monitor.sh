@@ -64,30 +64,30 @@ files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queri
 logger "flags: ${LOGGER_FLAGS}"
 logger "monitoring $files for CDS updates"
 
-( tail -n0 -f $files | stdbuf -oL grep '.*' |
-  while IFS= read -r line; do
-    #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
-    if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
-      domain=$(awk '{print $6}' <<<"${line//\// }")
-      logger "KSK Published! domain:${domain}"
-      if [[ ! -f ${domain}.dsprocess ]]; then
-        touch ${DSPROCESS_PATH}/${domain}.dsprocess
-        ${DIR}/add.sh ${domain}
+(
+  tail -n0 -f $files | stdbuf -oL grep '.*' |
+    while IFS= read -r line; do
+      #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
+      if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
+        domain=$(awk '{print $6}' <<<"${line//\// }")
+        logger "KSK Published! domain:${domain}"
+        if [[ ! -f ${domain}.dsprocess ]]; then
+          touch ${DSPROCESS_PATH}/${domain}.dsprocess
+          ${DIR}/add.sh ${domain}
+        fi
       fi
-    fi
 
-    #line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
-    if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
-      domain=$(awk '{print $8}' <<<"${line//\// }")
-      logger "CDS Published! domain:${domain}"
-      if [[ ! -f ${domain}.dsprocess ]]; then
-        touch ${DSPROCESS_PATH}/${domain}.dsprocess
-        ${DIR}/update.sh ${domain}
+      #line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
+      if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
+        domain=$(awk '{print $8}' <<<"${line//\// }")
+        logger "CDS Published! domain:${domain}"
+        if [[ ! -f ${domain}.dsprocess ]]; then
+          touch ${DSPROCESS_PATH}/${domain}.dsprocess
+          ${DIR}/update.sh ${domain}
+        fi
       fi
-    fi
-  done
+    done
 ) &
 tail_pid=$!
-echo cme-dnssec-monitor TAIL PID $tail_pid
-jobs -x echo cme-dnssec-monitor %1 %2 %3 %4
-wait $(jobs -x echo %1)
+logger TAIL PID $tail_pid
+wait $tail_pid

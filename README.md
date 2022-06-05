@@ -28,7 +28,7 @@ sudo git pull
 cp *.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl restart cme-dnssec-monitor.service
-``
+```
 
 ## Info
 
