@@ -43,8 +43,8 @@ function trap_exit() {
     wait $tail_pid
     kill -1 $monitor_pid
     wait $monitor_pid
-    exit 0
   fi
+  exit 0
 }
 
 #add interfaces for access to views
