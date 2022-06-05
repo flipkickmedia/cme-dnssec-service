@@ -41,7 +41,7 @@ if [[ $1 == '--clean' ]]; then
   done
 fi
 
-${DIR}/dnssec-monitor.sh --clean &
+LOGGER_FLAGS=${LOGGER_FLAGS} ${DIR}/dnssec-monitor.sh --clean &
 monitor_pid=$!
 logger "monitor running on ${monitor_pid}"
 
