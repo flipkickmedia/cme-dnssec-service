@@ -64,11 +64,7 @@ files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queri
 logger "flags: ${LOGGER_FLAGS}"
 logger "monitoring $files for CDS updates"
 
-#tail -n0 -f $files | stdbuf -oL grep '.*' |
-(
-  tail -n0 -f $files &
-  echo $! >&3
-) 3>tail_pid | stdbuf -oL grep '.*' |
+tail -n0 -f $files | stdbuf -oL grep '.*' |
   while IFS= read -r line; do
     #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
     if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
@@ -90,5 +86,6 @@ logger "monitoring $files for CDS updates"
       fi
     fi
   done &
-tail_pid=$(<tail_pid)
+tail_pid=$!
+jobs -x echo cme-dnssec-monitor JOB %1
 wait $tail_pid
