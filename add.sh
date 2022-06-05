@@ -1,42 +1,13 @@
 #!/usr/bin/env bash
 # add.sh
 # adds a DS key to the parent domain when there are no CDS keys present.  If this is a clean run (i.e. no keys, service named start, make a cup of tea, then run this run this on each domain from the root down.)
-# e.g.
-# $ service named start
-# $ sleep 600
-# $ add.sh node.flipkick.media ; add.sh dev.node.flipkick.media ; add subsub.dev.node.flipkick.media
-# @todo error checking, this works if everything is perfect..and that's about it.
-# RNDC_KEYS keys needed for nsupdate to access the correct view
-# IFACE_INDEX interfaces created on a local interface, in my case, 10.0.254.1 is internal, 10.0.254.2
-# is external and allow dig to bind to an address so we can provide give dig access to the correct view.
-# VIEWS names of the views
-# note arrays are linked indexes
+# e.g. $ add.sh example.com
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+. ${DIR}/lib.sh
 
-function parent_domain() {
-  local parent
-  set -- ${1//\./ }
-  shift
-  set -- "$@"
-  parent="$*"
-  parent=${parent//\ /\.}
-  echo $parent
-}
-
-function log() {
-  /usr/bin/logger ${LOGGER_FLAGS} "$@"
-}
-
-DATA_PATH="${DATA_PATH:-/var/cache/bind}"
-KEY_PATH="${KEY_PATH:-${DATA_PATH}/keys}"
 DOMAIN=${DOMAIN:-$1}
 PARENT_DOMAIN=$(parent_domain ${DOMAIN})
-RNDC_KEYS=('external-rndc-key:${EXTERNAL_RNDC_KEY}' 'internal-rndc-key:${INTERNAL_RNDC_KEY}')
-VIEWS=(externals-master internals-master)
-IFACE_INDEX=(10.0.254.2 10.0.254.1)
-NS_SERVER='127.0.0.1'
-#@todo  ttl needs some work so we don't clobber the key publish/expiry times
 TTL=60
-alias log="/usr/bin/logger ${LOGGER_FLAGS}"
 
 #find the id for the currently active KSK
 for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
@@ -47,7 +18,7 @@ for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
   fi
 done
 f=${f/\.state/\.key}
-logger "update KSK for domain:$DOMAIN id:$id f:$f"
+log "update KSK for domain:$DOMAIN id:$id f:$f"
 
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
@@ -87,8 +58,8 @@ zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
 add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
-      rndc notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
-      rndc notify ${DOMAIN} in ${VIEWS[$i]}
     )
+    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
+    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${VIEWS[$i]}
   fi
 done

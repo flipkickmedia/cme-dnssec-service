@@ -1,24 +1,13 @@
 #!/usr/bin/env bash
-
-function parent_domain() {
-  set -- ${1//\./ }
-  shift
-  set -- "$@"
-  parent="$*"
-  parent=${parent//\ /\.}
-  echo $parent
-}
+# update.sh
+# adds a DS key to the parent domain when there are no CDS keys present.  If this is a clean run (i.e. no keys, service named start, make a cup of tea, then run this run this on each domain from the root down.)
+# e.g. $ update.sh example.com
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+. ${DIR}/lib.sh
 
 DOMAIN=$1
 PARENT_DOMAIN=$(parent_domain $1)
-RNDC_KEYS=('external-rndc-key:SKKwYrnhqFMugles1XYflg9uhaKMmA4nQieqwflLLtM2Ox5CltvsZXd86LFbf+JRUAbYkkpImkrzh5AnX6D2zg==' 'internal-rndc-key:8gKLwTuPIEWOrwavIdALEGYZb6RX3uE1DwlMJFW7zjkRsaBfMPrlh2P2k3St4GGeo4BzncgsABXYYxXqn8SZXg==')
-IFACE_INDEX=(10.0.254.2 10.0.254.1)
-NS_SERVER='127.0.0.1'
 TTL=60
-
-function log() {
-  /usr/bin/logger ${LOGGER_FLAGS} "$@"
-}
 
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
@@ -31,15 +20,13 @@ for view in ${views[@]}; do
   key_name="${!key_var}"
   key_value_name="${var^^}"
   key_value="${!key_value_name}"
-  
+
   echo ip_addr $ip_addr
   echo key_var $key_var
   echo key_name $key_name
   echo key_value_name $key_value_name
   echo key_value $key_value
 
-  key=${RNDC_KEYS[$i]}
-  iface=${IFACE_INDEX[$i]}
   dig -b $ip_addr @${NS_SERVER} +norecurse "$DOMAIN". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$DOMAIN" | tee "dsset-${DOMAIN}." >/dev/null
   dig -b $ip_addr @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" >/dev/null
   dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
@@ -63,4 +50,6 @@ send
 EOF
   )
   rm nsup
+  rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
+  rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${VIEWS[$i]}
 done
