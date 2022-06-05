@@ -7,7 +7,7 @@ DATA_PATH="/var/cache/bind"
 DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-alias log="logger ${LOGGER_FLAGS}"
+alias log="/usr/bin/logger ${LOGGER_FLAGS}"
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
 
