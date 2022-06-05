@@ -12,7 +12,7 @@ function trap_exit() {
   kill -1 $monitor_pid
 }
 logger "flags: ${LOGGER_FLAGS}"
-trap trap_exit EXIT SIGTERM SIGKILL
+trap "trap_exit" EXIT SIGTERM SIGKILL
 clear
 alias logger='logger ${LOGGER_FLAGS}'
 
@@ -67,3 +67,5 @@ tail -n0 -f $files | stdbuf -oL grep '.*' |
       fi
     fi
   done
+
+wait "${monitor_pid}"
