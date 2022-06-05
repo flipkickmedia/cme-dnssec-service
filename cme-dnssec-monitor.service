@@ -3,7 +3,7 @@ Description=BindDNSSECMonitor
 Before=named.service
 
 [Service]
-Type=process
+Type=simple
 ExecStart=/usr/local/sbin/cme-bind-dnssec/dnssec-monitor.sh
 KillSignal=15
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
