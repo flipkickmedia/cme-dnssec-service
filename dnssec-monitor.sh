@@ -53,21 +53,17 @@ function trap_exit() {
 }
 
 #check interfaces for views
+readarray -td: views <<<"$VIEWS"
+for view in ${views[@]}; do
+  var="${view^^}"
+  var="${var//-/_}_IFACE"
+  ip_addr="${!var}"
 
-readarray -d ':' views <<<"$VIEWS"
-for view in "${views[@]}"; do
-  var="${view^}_IFACE"
-  var="${var//-/_}"
-  echo VAR: $var
-  ip_addr=${!var}
   if ! ping -c1 -w3 $ip_addr >/dev/null 2>&1; then
+    # @todo get network inteface
     ip a a 10.0.254.2 dev eno1
   fi
 done
-
-# @todo add interfaces for access to views
-
-ip a a 10.0.254.1 dev eno1
 
 trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 
