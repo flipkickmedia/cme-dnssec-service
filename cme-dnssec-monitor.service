@@ -15,6 +15,3 @@ TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target
-
-[Journal]
-Storage=persistent
