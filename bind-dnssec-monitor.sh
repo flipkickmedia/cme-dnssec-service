@@ -6,7 +6,9 @@
 DATA_PATH="/var/cache/bind"
 DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
+
 function trap_exit() {
+  logger "terminating monitor on PID:$monitor_pid"
   kill -1 $monitor_pid
 }
 
