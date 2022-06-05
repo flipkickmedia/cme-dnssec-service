@@ -15,7 +15,7 @@ RNDC_KEYS=('external-rndc-key:SKKwYrnhqFMugles1XYflg9uhaKMmA4nQieqwflLLtM2Ox5Clt
 IFACE_INDEX=(10.0.254.2 10.0.254.1)
 NS_SERVER='127.0.0.1'
 TTL=60
-
+alias log='logger ${LOGGER_FLAGS}'
 #@todo touch -t $(date +%Y%M%d%H%M) "dsset-${z}."
 #dig @127.0.0.1 +norecurse "$d". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$d" | tee "dsset-${d}." >/dev/null
 #dnssec-dsfromkey -a SHA-384 /var/cache/bind/keys/K${d}.+014+${id}.key | tee "dsset-${d}."
