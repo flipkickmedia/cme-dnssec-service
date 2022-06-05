@@ -4,7 +4,7 @@ Before=named.service
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -c /usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.sh
+ExecStart=/usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.sh
 TimeoutStopSec=20
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
 KillMode=process
