@@ -20,12 +20,6 @@ function log() {
   /usr/bin/logger ${LOGGER_FLAGS} "$@"
 }
 
-#@todo touch -t $(date +%Y%M%d%H%M) "dsset-${z}."
-#dig @127.0.0.1 +norecurse "$d". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$d" | tee "dsset-${d}." >/dev/null
-#dnssec-dsfromkey -a SHA-384 /var/cache/bind/keys/K${d}.+014+${id}.key | tee "dsset-${d}."
-
-echo -e
-
 for i in ${!RNDC_KEYS[@]}; do
   key=${RNDC_KEYS[$i]}
   iface=${IFACE_INDEX[$i]}
@@ -34,12 +28,14 @@ for i in ${!RNDC_KEYS[@]}; do
   dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
 
   log "updating CDS running nsupdate for $key"
-  cat <<EOF
-server ${NS_SERVER}
-zone ${DOMAIN}
-$(cat ./nsup)
-send
+  if CME_DNSSEC_MONITOR_DEBUG -eq 1; then
+    cat <<EOF
+#server ${NS_SERVER}
+#zone ${DOMAIN}
+#$(cat ./nsup)
+#send
 EOF
+  fi
 
   nsupdate -y hmac-sha512:${key} < <(
     cat <<EOF

@@ -40,17 +40,19 @@ if [[ $1 == '--clean' ]]; then
 fi
 
 function trap_exit() {
-  if [[ -n $monitor_pid && $(ps -p $monitor_pid) ]]; then
-    log "terminating monitor on PID:$monitor_pid"
-    kill -1 $tail_pid
-    wait $tail_pid
+  if [[ -n $monitor_pid && -n $(ps -p $monitor_pid) ]]; then
+    log "monitor terminating on PID:$monitor_pid"
     kill -1 $monitor_pid
     wait $monitor_pid
+  fi
+  if [[ -n $tail_pid && -n $(ps -p $tail_pid) ]]; then
+    kill -1 $tail_pid
+    wait $tail_pid
   fi
   exit 0
 }
 
-#add interfaces for access to views
+# @todo add interfaces for access to views
 ip a a 10.0.254.2 dev eno1
 ip a a 10.0.254.1 dev eno1
 
@@ -58,18 +60,16 @@ trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} ${DIR}/dnssec-monitor.sh --clean &
 monitor_pid=$!
-log "monitor running on ${monitor_pid}"
+log "monitor running on ${monitor_pid} for CDS/KSK publish events"
 
 # main monitoring/update
-
 files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queries)
-log "monitor flags: ${LOGGER_FLAGS}"
-log "monitoring $files for CDS updates"
-
+log ""
 (
   tail -n0 -f $files | stdbuf -oL grep '.*' |
     while IFS= read -r line; do
-      #line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
+      # example
+      # line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
       if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
         domain=$(awk '{print $6}' <<<"${line//\// }")
         log "KSK Published! domain:${domain}"
@@ -79,7 +79,8 @@ log "monitoring $files for CDS updates"
         fi
       fi
 
-      #line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
+      # example
+      # line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
       if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
         domain=$(awk '{print $8}' <<<"${line//\// }")
         log "CDS Published! domain:${domain}"
