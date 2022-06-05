@@ -7,23 +7,19 @@ DATA_PATH="/var/cache/bind"
 DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-function trap_exit() {
-  if [[ -n $monitor_pid && $(ps -p $monitor_pid) ]]; then
-    logger "terminating monitor on PID:$monitor_pid"
-    kill -1 $monitor_pid
-  fi
-}
-
-trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
-alias logger='logger ${LOGGER_FLAGS}'
-logger "flags: ${LOGGER_FLAGS}"
-
-#add interfaces for access to views
-ip a a 10.0.254.2 dev eno1
-ip a a 10.0.254.1 dev eno1
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
+
+  function trap_exit() {
+    logger "terminating dsprocess monitor"
+    exit 0
+  }
+
+  trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+  alias logger='logger ${LOGGER_FLAGS}'
+  logger "flags: ${LOGGER_FLAGS}"
+
   shopt -s extglob
   while (true); do
     for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
@@ -40,6 +36,22 @@ if [[ $1 == '--clean' ]]; then
     sleep 5
   done
 fi
+
+function trap_exit() {
+  if [[ -n $monitor_pid && $(ps -p $monitor_pid) ]]; then
+    logger "terminating monitor on PID:$monitor_pid"
+    kill -1 $monitor_pid
+    exit 0
+  fi
+}
+
+#add interfaces for access to views
+ip a a 10.0.254.2 dev eno1
+ip a a 10.0.254.1 dev eno1
+
+trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+alias logger='logger ${LOGGER_FLAGS}'
+logger "flags: ${LOGGER_FLAGS}"
 
 LOGGER_FLAGS=${LOGGER_FLAGS} ${DIR}/dnssec-monitor.sh --clean &
 monitor_pid=$!
