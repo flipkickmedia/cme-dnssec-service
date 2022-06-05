@@ -79,7 +79,7 @@ send
 EOF
     fi
 
-    nsupdate -y hmac-sha512:${key_name}:${key} < <(
+    nsupdate -y hmac-sha512:${key_name}:${key_value} < <(
       cat <<EOF
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}

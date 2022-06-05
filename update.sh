@@ -20,11 +20,26 @@ function log() {
   /usr/bin/logger ${LOGGER_FLAGS} "$@"
 }
 
-for i in ${!RNDC_KEYS[@]}; do
+#run updates for all views
+readarray -td: views <<<"$VIEWS"
+for view in ${views[@]}; do
+  var="${view^^}"
+  var="${var//-/_}_IFACE"
+  ip_addr="${!var}"
+  key_var="${var//-/_}_KEY_NAME"
+  key_name="${!var}"
+  key_value_name="${var^^}"
+  key_value="${!key_value_name}"
+  echo $ip_addr
+  echo $key_var
+  echo $key_name
+  echo $key_value_name
+  echo $key_value
+
   key=${RNDC_KEYS[$i]}
   iface=${IFACE_INDEX[$i]}
-  dig -b $iface @${NS_SERVER} +norecurse "$DOMAIN". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$DOMAIN" | tee "dsset-${DOMAIN}." >/dev/null
-  dig -b $iface @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" >/dev/null
+  dig -b $ip_addr @${NS_SERVER} +norecurse "$DOMAIN". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$DOMAIN" | tee "dsset-${DOMAIN}." >/dev/null
+  dig -b $ip_addr @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" >/dev/null
   dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
 
   log "updating CDS running nsupdate for $key"
@@ -37,7 +52,7 @@ for i in ${!RNDC_KEYS[@]}; do
 EOF
   fi
 
-  nsupdate -y hmac-sha512:${key} < <(
+  nsupdate -y hmac-sha512:${key_name}:${key_value} < <(
     cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
