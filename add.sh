@@ -32,7 +32,7 @@ IFACE_INDEX=(10.0.254.2 10.0.254.1)
 NS_SERVER='127.0.0.1'
 #@todo  ttl needs some work so we don't clobber the key publish/expiry times
 TTL=60
-alias log='logger ${LOGGER_FLAGS}'
+alias log="logger ${LOGGER_FLAGS}"
 
 #find the id for the currently active KSK
 for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
