@@ -48,18 +48,30 @@ for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
 done
 f=${f/\.state/\.key}
 logger "update KSK for domain:$DOMAIN id:$id f:$f"
-for i in ${!RNDC_KEYS[@]}; do
-  key=${RNDC_KEYS[$i]}
-  iface=${IFACE_INDEX[$i]}
 
+#run updates for all views
+readarray -td: views <<<"$VIEWS"
+for view in ${views[@]}; do
+  var="${view^^}"
+  var="${var//-/_}_IFACE"
+  ip_addr="${!var}"
+  key_var="${var//-/_}_KEY_NAME"
+  key_name="${!var}"
+  key_value_name="${var^^}"
+  key_value="${!key_value_name}"
+  echo $ip_addr
+  echo $key_var
+  echo $key_name
+  echo $key_value_name
+  echo $key_value
   #check to see if we have a CDS key published
-  cds=$(dig -b $iface @${NS_SERVER} +noall +answer $DOMAIN CDS)
+  cds=$(dig -b $ip_addr @${NS_SERVER} +noall +answer $DOMAIN CDS)
   if [[ $cds == "" ]]; then
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
     logger "running nsupdate for $key"
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       cat <<EOF
-nsupdate -y hmac-sha512:${key}
+nsupdate -y hmac-sha512:${key_name}:${key}
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
 add ${DOMAIN}. ${TTL} DS $ds
@@ -67,7 +79,7 @@ send
 EOF
     fi
 
-    nsupdate -y hmac-sha512:${key} < <(
+    nsupdate -y hmac-sha512:${key_name}:${key} < <(
       cat <<EOF
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
