@@ -3,9 +3,6 @@
 # monitor.sh
 # monitor named log output for CDS published string
 # run update.sh with domain
-DATA_PATH="/var/cache/bind"
-DSPROCESS_PATH="${DATA_PATH}/dsprocess"
-BIND_LOG_PATH="/var/log/named"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 function log() {
   /usr/bin/logger ${LOGGER_FLAGS} "$@"

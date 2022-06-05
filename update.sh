@@ -27,14 +27,16 @@ for view in ${views[@]}; do
   var="${var//-/_}_IFACE"
   ip_addr="${!var}"
   key_var="${var//-/_}_KEY_NAME"
-  key_name="${!var}"
+  key_var="${key_var^^}"
+  key_name="${!key_var}"
   key_value_name="${var^^}"
   key_value="${!key_value_name}"
-  echo $ip_addr
-  echo $key_var
-  echo $key_name
-  echo $key_value_name
-  echo $key_value
+  
+  echo ip_addr $ip_addr
+  echo key_var $key_var
+  echo key_name $key_name
+  echo key_value_name $key_value_name
+  echo key_value $key_value
 
   key=${RNDC_KEYS[$i]}
   iface=${IFACE_INDEX[$i]}
@@ -42,7 +44,7 @@ for view in ${views[@]}; do
   dig -b $ip_addr @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" >/dev/null
   dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
 
-  log "updating CDS running nsupdate for $key"
+  log "handling CDS publish - running nsupdate for domain:${DOMAIN} view:${view} key:${key_name}"
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     cat <<EOF
 #server ${NS_SERVER}

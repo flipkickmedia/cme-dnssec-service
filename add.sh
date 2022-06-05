@@ -59,19 +59,20 @@ for view in ${views[@]}; do
   key_name="${!var}"
   key_value_name="${var^^}"
   key_value="${!key_value_name}"
-  echo $ip_addr
-  echo $key_var
-  echo $key_name
-  echo $key_value_name
-  echo $key_value
+
+  echo ip_addr $ip_addr
+  echo key_var $key_var
+  echo key_name $key_name
+  echo key_value_name $key_value_name
+  echo key_value $key_value
   #check to see if we have a CDS key published
   cds=$(dig -b $ip_addr @${NS_SERVER} +noall +answer $DOMAIN CDS)
   if [[ $cds == "" ]]; then
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
-    logger "running nsupdate for $key"
+    log "handling KSK publish - running nsupdate for view:${view} key:${key_name}"
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       cat <<EOF
-nsupdate -y hmac-sha512:${key_name}:${key}
+nsupdate -y hmac-sha512:${key_name}:${key_value}
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
 add ${DOMAIN}. ${TTL} DS $ds
