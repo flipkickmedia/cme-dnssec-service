@@ -7,8 +7,10 @@ sudo cp /usr/local/sbin/cme-bind-dnssec/cme-dnssec-monitor.service /etc/systemd/
 sudo chown root:root /etc/systemd/system/cme-dnssec-monitor.service
 
 #create config
-sudo mkdir /etc/cme
-cp cme-dnssec-monitor.env /etc/cme/
+if [[ ! -d /etc/cme && ! -f /etc/cme/cme-dnsset-monitor.env ]]; then
+  sudo mkdir /etc/cme
+  cp cme-dnssec-monitor.env /etc/cme/
+fi
 chown root:root -R /etc/cme
 chmod 700 /etc/cme
 chmod 600 /etc/cme/cme-dnssec-monitor.env
