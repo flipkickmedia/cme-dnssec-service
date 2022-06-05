@@ -1,6 +1,6 @@
 [Unit]
 Description=BindDNSECMonitor
-RequiredBy=named.service
+Before=named.service
 
 [Service]
 Type=simple

@@ -6,7 +6,7 @@
 DATA_PATH="/var/cache/bind"
 DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
-
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 function trap_exit() {
   logger "terminating monitor on PID:$monitor_pid"
   kill -1 $monitor_pid
@@ -36,7 +36,8 @@ if [[ $1 == '--clean' ]]; then
     sleep 5
   done
 fi
-./bind-dnssec-monitor.sh --clean &
+pwd
+${DIR}/bind-dnssec-monitor.sh --clean &
 monitor_pid=$!
 
 # main monitoring/update
@@ -52,7 +53,7 @@ tail -n0 -f $files | stdbuf -oL grep '.*' |
       logger "KSK Published! domain:${domain}"
       if [[ ! -f ${domain}.dsprocess ]]; then
         touch ${DSPROCESS_PATH}/${domain}.dsprocess
-        ./add.sh ${domain}
+        ${DIR}/add.sh ${domain}
       fi
     fi
 
@@ -62,7 +63,7 @@ tail -n0 -f $files | stdbuf -oL grep '.*' |
       logger "CDS Published! domain:${domain}"
       if [[ ! -f ${domain}.dsprocess ]]; then
         touch ${DSPROCESS_PATH}/${domain}.dsprocess
-        ./update.sh ${domain}
+        ${DIR}/update.sh ${domain}
       fi
     fi
   done
