@@ -9,9 +9,9 @@ KillSignal=15
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
 KillMode=process
 Restart=on-failure
-Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag cme-dnssec-monitor"
 SyslogIdentifier=cme-dnssec-monitor
 TimeoutStopSec=15
-
+Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag cme-dnssec-monitor"
+EnvironmentFile='/etc/cme/dnssec.env'
 [Install]
 WantedBy=multi-user.target
