@@ -2,6 +2,7 @@
 # add.sh
 # adds a DS key to the parent domain when there are no CDS keys present.  If this is a clean run (i.e. no keys, service named start, make a cup of tea, then run this run this on each domain from the root down.)
 # e.g. $ add.sh example.com
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . ${DIR}/lib.sh
 

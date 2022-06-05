@@ -69,7 +69,6 @@ log "monitor running on ${monitor_pid} for CDS/KSK publish events"
 
 # main monitoring/update
 files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queries)
-log ""
 (
   tail -n0 -f $files | stdbuf -oL grep '.*' |
     while IFS= read -r line; do
