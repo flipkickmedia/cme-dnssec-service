@@ -11,11 +11,11 @@ function trap_exit() {
   logger "terminating monitor on PID:$monitor_pid"
   kill -1 $monitor_pid
 }
-logger "flags: ${LOGGER_FLAGS}"
-trap "trap_exit" EXIT SIGTERM SIGKILL
+
+trap "trap_exit" EXIT SIGINT SIGKILL SIGTERM SIGSTOP
 clear
 alias logger='logger ${LOGGER_FLAGS}'
-
+logger "flags: ${LOGGER_FLAGS}"
 #add interfaces for access to views
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
