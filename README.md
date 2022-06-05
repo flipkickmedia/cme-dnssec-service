@@ -14,24 +14,27 @@ These scripts monitor the bind logs for CDS and KSK publishing and updates the D
 To use, extract the files to somewhere safe on your DNS server, `/usr/local/sbin` is a good place
 
 ```
-git clone ssh://git.flipkick.media/cme/cme-bind-dnssec /usr/local/sbin/cme-bind-dnssec
-cp /usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.service /etc/systemd/system/
-systemctl enable bind-dnssec-monitor.service
-systemctl start bind-dnssec-monitor.service
-systemctl restart named
+sudo git clone ssh://git.flipkick.media/cme/cme-bind-dnssec /usr/local/sbin/cme-bind-dnssec
+sudo cp /usr/local/sbin/cme-bind-dnssec/bind-dnssec-monitor.service /etc/systemd/system/
+sudo systemctl enable bind-dnssec-monitor.service
+sudo systemctl start bind-dnssec-monitor.service
+sudo systemctl restart named
 ```
 
-If you do a
+## Update
 ```
-ps -ef | grep bash
-```
-You should see
-```
+cd /usr/local/sbin/cme-bind-dnssec
+sudo git pull
+cp *.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl restart cme-dnssec-monitor.service
+``
 
-```
+## Info
 
+USing DNSVis you can visualise your DNS configuration for a given domain name.
 
-, and run `monitor.sh` script before starting named.
+https://dnsviz.net/d/dev.node.flipkick.media/dnssec/
 
 ![DNSVIS flipkick.media](./dnsvis.png)
 
