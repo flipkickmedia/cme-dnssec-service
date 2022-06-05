@@ -89,5 +89,4 @@ logger "monitoring $files for CDS updates"
     done
 ) &
 tail_pid=$!
-logger TAIL PID $tail_pid
 wait $tail_pid
