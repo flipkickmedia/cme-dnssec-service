@@ -8,7 +8,7 @@ DSPROCESS_PATH="${DATA_PATH}/dsprocess"
 BIND_LOG_PATH="/var/log/named"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 function trap_exit() {
-  if [[ -n $monitor_pid ]]; then
+  if [[ -n $monitor_pid && $(ps -p $monitor_pid) ]]; then
     logger "terminating monitor on PID:$monitor_pid"
     kill -15 $monitor_pid
   fi
