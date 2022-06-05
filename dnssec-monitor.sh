@@ -41,7 +41,9 @@ function trap_exit() {
   if [[ -n $monitor_pid && $(ps -p $monitor_pid) ]]; then
     logger "terminating monitor on PID:$monitor_pid"
     kill -1 $tail_pid
+    wait $tail_pid
     kill -1 $monitor_pid
+    wait $monitor_pid
     exit 0
   fi
 }
