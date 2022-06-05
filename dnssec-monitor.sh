@@ -89,4 +89,4 @@ tail -n0 -f $files | stdbuf -oL grep '.*' |
 tail_pid=$!
 echo cme-dnssec-monitor TAIL PID $tail_pid
 jobs -x echo cme-dnssec-monitor %1 %2 %3 %4
-wait $tail_pid
+wait $(jobs -x echo %1)
