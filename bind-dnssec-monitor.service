@@ -9,7 +9,7 @@ TimeoutStopSec=20
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
 KillMode=process
 Restart=on-failure
-Environment='LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag bind-dnssec-monitor'
+Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag bind-dnssec-monitor"
 
 [Install]
 WantedBy=multi-user.target

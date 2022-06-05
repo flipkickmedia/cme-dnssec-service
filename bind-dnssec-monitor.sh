@@ -11,7 +11,7 @@ function trap_exit() {
   logger "terminating monitor on PID:$monitor_pid"
   kill -1 $monitor_pid
 }
-
+logger "flags: ${LOGGER_FLAGS}"
 trap trap_exit EXIT SIGTERM SIGKILL
 clear
 alias logger='logger ${LOGGER_FLAGS}'
