@@ -28,7 +28,7 @@ for i in ${!RNDC_KEYS[@]}; do
   dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
 
   log "updating CDS running nsupdate for $key"
-  if CME_DNSSEC_MONITOR_DEBUG -eq 1; then
+  if $CME_DNSSEC_MONITOR_DEBUG -eq 1; then
     cat <<EOF
 #server ${NS_SERVER}
 #zone ${DOMAIN}

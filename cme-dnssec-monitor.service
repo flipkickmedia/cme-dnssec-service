@@ -11,7 +11,6 @@ KillMode=control-group
 Restart=on-failure
 SyslogIdentifier=cme-dnssec-monitor
 TimeoutStopSec=15
-Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag cme-dnssec-monitor"
 EnvironmentFile='/etc/cme/dnssec.env'
 [Install]
 WantedBy=multi-user.target
