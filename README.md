@@ -32,11 +32,11 @@ systemctl restart cme-dnssec-monitor.service
 
 ## Info
 
-USing DNSVis you can visualise your DNS configuration for a given domain name.
+USing DNSViz you can visualise your DNS configuration for a given domain name.
 
 https://dnsviz.net/d/dev.node.flipkick.media/dnssec/
 
-![DNSVIS flipkick.media](./dnsvis.png)
+![DNSViz flipkick.media](./dnsvis.png)
 
 ## CME
 

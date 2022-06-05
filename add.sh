@@ -30,30 +30,29 @@ RNDC_KEYS=('external-rndc-key:<your key here>' 'internal-rndc-key:<your key here
 VIEWS=(externals-master internals-master)
 IFACE_INDEX=(10.0.254.2 10.0.254.1)
 NS_SERVER='127.0.0.1'
-
 #@todo  ttl needs some work so we don't clobber the key publish/expiry times
-TTL=600
+TTL=60
 
 #find the id for the currently active KSK
-for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state;do
-  if grep -q "KSK: yes" $f;then
-    if ! grep -q "Successor:" $f;then
+for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
+  if grep -q "KSK: yes" $f; then
+    if ! grep -q "Successor:" $f; then
       id=$(echo $f | grep -Po '\d+' | tail -n 1)
     fi
   fi
 done
 f=${f/\.state/\.key}
-echo domain:$DOMAIN id:$id f:$f
+logger "update KSK for domain:$DOMAIN id:$id f:$f"
 for i in ${!RNDC_KEYS[@]}; do
-  key=${RNDC_KEYS[$i]};
+  key=${RNDC_KEYS[$i]}
   iface=${IFACE_INDEX[$i]}
 
   #check to see if we have a CDS key published
   cds=$(dig -b $iface @${NS_SERVER} +noall +answer $DOMAIN CDS)
-  if [[ $cds == "" ]];then
+  if [[ $cds == "" ]]; then
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
-    echo running nsupdate for $key
-    cat << EOF
+    logger "running nsupdate for $key"
+    cat <<EOF
 nsupdate -y hmac-sha512:${key}
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
@@ -61,15 +60,15 @@ add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
 
-    nsupdate -y hmac-sha512:${key} < <(cat <<EOF
+    nsupdate -y hmac-sha512:${key} < <(
+      cat <<EOF
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
 add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
-rndc notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
-rndc notify ${DOMAIN} in ${VIEWS[$i]}
-)
-
+      rndc notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
+      rndc notify ${DOMAIN} in ${VIEWS[$i]}
+    )
   fi
 done

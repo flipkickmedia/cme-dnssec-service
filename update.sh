@@ -1,4 +1,4 @@
-#!/usr/bin/env bash 
+#!/usr/bin/env bash
 
 function parent_domain() {
   set -- ${1//\./ }
@@ -23,27 +23,27 @@ TTL=60
 echo -e
 
 for i in ${!RNDC_KEYS[@]}; do
-  key=${RNDC_KEYS[$i]};
+  key=${RNDC_KEYS[$i]}
   iface=${IFACE_INDEX[$i]}
   dig -b $iface @${NS_SERVER} +norecurse "$DOMAIN". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "$DOMAIN" | tee "dsset-${DOMAIN}." >/dev/null
-  dig -b $iface @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" > /dev/null
-  dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup > /dev/null
+  dig -b $iface @${NS_SERVER} +dnssec +noall +answer $DOMAIN DNSKEY $DOMAIN CDNSKEY $DOMAIN CDS | tee "file-${DOMAIN}" >/dev/null
+  dnssec-cds -a SHA-384 -s-86400 -T ${TTL} -u -i -f file-${DOMAIN} -d . -i.orig $DOMAIN | tee ./nsup >/dev/null
 
-  echo running nsupdate for $key
-  cat << EOF
+  logger "updating CDS running nsupdate for $key"
+  cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
 $(cat ./nsup)
 send
 EOF
 
-  nsupdate -y hmac-sha512:${key} < <(cat <<EOF
+  nsupdate -y hmac-sha512:${key} < <(
+    cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
 $(cat ./nsup)
 send
 EOF
-)
-rm nsup
+  )
+  rm nsup
 done
-
