@@ -56,7 +56,8 @@ function trap_exit() {
 
 readarray -d ':' views <<<"$VIEWS"
 for view in "${views[@]}"; do
-  var="${view^//-/_}_IFACE"
+  var="${view^}_IFACE"
+  var="${var//-/_}"
   echo VAR: $var
   ip_addr=${!var}
   if ! ping -c1 -w3 $ip_addr >/dev/null 2>&1; then
