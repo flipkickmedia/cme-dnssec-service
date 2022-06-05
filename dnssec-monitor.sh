@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-#
-# monitor.sh
+# dnssec-monitor.sh
 # monitor named log output for CDS published string
 # run update.sh with domain
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . ${DIR}/lib.sh
+
+# check config matches
+# @todo
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then

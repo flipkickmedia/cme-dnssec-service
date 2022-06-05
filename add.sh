@@ -9,7 +9,7 @@ DOMAIN=${DOMAIN:-$1}
 PARENT_DOMAIN=$(parent_domain ${DOMAIN})
 TTL=60
 
-#find the id for the currently active KSK
+#find the id for the currently active KSK for the provided domain
 for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
   if grep -q "KSK: yes" $f; then
     if ! grep -q "Successor:" $f; then
@@ -18,7 +18,6 @@ for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
   fi
 done
 f=${f/\.state/\.key}
-log "update KSK for domain:$DOMAIN id:$id f:$f"
 
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
