@@ -36,9 +36,10 @@ if [[ $1 == '--clean' ]]; then
     sleep 5
   done
 fi
-pwd
+
 ${DIR}/bind-dnssec-monitor.sh --clean &
 monitor_pid=$!
+logger "monitor running on ${monitor_pid}"
 
 # main monitoring/update
 
