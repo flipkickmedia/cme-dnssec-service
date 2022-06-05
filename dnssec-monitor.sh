@@ -18,7 +18,7 @@ if [[ $1 == '--clean' ]]; then
 
   trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
   alias logger='logger ${LOGGER_FLAGS}'
-  logger "flags: ${LOGGER_FLAGS}"
+  logger "clean flags: ${LOGGER_FLAGS}"
 
   shopt -s extglob
   while (true); do
@@ -61,7 +61,7 @@ logger "monitor running on ${monitor_pid}"
 # main monitoring/update
 
 files=$(find ${BIND_LOG_PATH} -type f -not -name zone_transfers -not -name queries)
-logger "flags: ${LOGGER_FLAGS}"
+logger "monitor flags: ${LOGGER_FLAGS}"
 logger "monitoring $files for CDS updates"
 
 (
