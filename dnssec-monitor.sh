@@ -53,7 +53,8 @@ function trap_exit() {
 }
 
 #check interfaces for views
-views=($(readarray -d ':' <<<$VIEWS))
+
+readarray -d ':' views <<<"$VIEWS"
 for view in "${views[@]}"; do
   var="${view^^//-/_}_IFACE"
   echo VAR: $var
