@@ -7,7 +7,7 @@ Type=simple
 ExecStart=/usr/local/sbin/cme-bind-dnssec/dnssec-monitor.sh
 KillSignal=15
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
-KillMode=control-group
+KillMode=process
 Restart=on-failure
 Environment="LOGGER_FLAGS=--file /var/log/named/cme-dnssec-monitor.log --tag cme-dnssec-monitor"
 SyslogIdentifier=cme-dnssec-monitor
