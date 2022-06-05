@@ -54,10 +54,10 @@ for view in ${views[@]}; do
   var="${view^^}"
   var="${var//-/_}_IFACE"
   ip_addr="${!var}"
-
+  iface=$(route | tail -n-1 | awk '{print $8}')
   if ! ping -c1 -w3 $ip_addr >/dev/null 2>&1; then
     # @todo get network inteface
-    ip a a 10.0.254.2 dev eno1
+    ip a a $ip_addr dev $iface
   fi
 done
 
