@@ -5,23 +5,17 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . ${DIR}/lib.sh
 
-# check config matches
+readarray -td: views <<<"$VIEWS"
+
+# print config
 echo "DATA_PATH:${DATA_PATH}"
 echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
 echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
 echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
 echo "NS_SERVER:${NS_SERVER}"
 echo "CONF_PATH:${CONF_PATH}"
-echo "EXTERNALS_MASTER_IFACE:${EXTERNALS_MASTER_IFACE}"
-echo "INTERNALS_MASTER_IFACE:${INTERNALS_MASTER_IFACE}"
-echo "EXTERNALS_MASTER_KEY_NAME:${EXTERNALS_MASTER_KEY_NAME}"
-echo "INTERNALS_MASTER_KEY_NAME$:${INTERNALS_MASTER_KEY_NAME}"
-echo "EXTERNALS_RNDC_KEY:$(if [[ -n ${EXTERNALS_RNDC_KEY} ]]; then echo '******'; else echo "NOT FOUND!"; fi)"
-echo "INTERNALS_RNDC_KEY:$(if [[ -n ${EXTERNALS_RNDC_KEY} ]]; then echo '******'; else echo "NOT FOUND!"; fi)"
 echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
 
-readarray -td: views <<<"$VIEWS"
-# check config
 for view in ${views[@]}; do
   view_var="${view^^}"
   iface_var="${view_var//-/_}_IFACE"
