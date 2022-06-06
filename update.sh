@@ -13,20 +13,23 @@ TTL=60
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
 for view in ${views[@]}; do
-  var="${view^^}"
-  var="${var//-/_}_IFACE"
-  ip_addr="${!var}"
-  key_var="${var//-/_}_KEY_NAME"
-  key_var="${key_var^^}"
+  view_var="${view^^}"
+  iface_var="${view_var//-/_}_IFACE"
+  key_var="${view_var//-/_}_KEY_NAME"
   key_name="${!key_var}"
-  key_value_name="${var^^}"
-  key_value="${!key_value_name}"
+  key_name_var="${key_name^^}"
+  key_name_var="${key_name_var//-/_}"
+  ip_addr="${!iface_var}"
+  key="${!key_name_var}"
 
+  echo "view:${view}"
   echo ip_addr $ip_addr
-  echo key_var $key_var
   echo key_name $key_name
-  echo key_value_name $key_value_name
-  echo key_value $key_value
+  echo key $key
+  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+    echo "NOT FOUND!"
+    exit 1
+  fi)"
 
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "dsset-${DOMAIN}." >/dev/null
   dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "file-${DOMAIN}" >/dev/null
@@ -42,7 +45,7 @@ for view in ${views[@]}; do
 EOF
   fi
 
-  nsupdate -y hmac-sha512:${key_name}:${key_value} < <(
+  nsupdate -y hmac-sha512:${view}:${key} < <(
     cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
@@ -51,6 +54,6 @@ send
 EOF
   )
   rm nsup
-  rndc -k ./rndc.${view}.key -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
-  rndc -k ./rndc.${view}.key -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
+  rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
+  rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
 done

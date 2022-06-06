@@ -23,19 +23,23 @@ f=${f/\.state/\.key}
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
 for view in ${views[@]}; do
-  var="${view^^}"
-  var="${var//-/_}_IFACE"
-  ip_addr="${!var}"
-  key_var="${var//-/_}_KEY_NAME"
-  key_name="${!var}"
-  key_value_name="${var^^}"
-  key_value="${!key_value_name}"
+  view_var="${view^^}"
+  iface_var="${view_var//-/_}_IFACE"
+  key_var="${view_var//-/_}_KEY_NAME"
+  key_name="${!key_var}"
+  key_name_var="${key_name^^}"
+  key_name_var="${key_name_var//-/_}"
+  ip_addr="${!iface_var}"
+  key="${!key_name_var}"
 
+  echo "view:${view}"
   echo ip_addr $ip_addr
-  echo key_var $key_var
   echo key_name $key_name
-  echo key_value_name $key_value_name
-  echo key_value $key_value
+  echo key $key
+  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+    echo "NOT FOUND!"
+    exit 1
+  fi)"
   #check to see if we have a CDS key published
   cds=$(dig -b $ip_addr @${NS_SERVER} +noall +answer $DOMAIN CDS)
   if [[ $cds == "" ]]; then

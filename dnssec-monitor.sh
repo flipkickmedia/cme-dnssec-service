@@ -23,22 +23,23 @@ echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
 readarray -td: views <<<"$VIEWS"
 # check config
 for view in ${views[@]}; do
-  echo "view:${view}"
   view_var="${view^^}"
   iface_var="${view_var//-/_}_IFACE"
   key_var="${view_var//-/_}_KEY_NAME"
+  key_name="${!key_var}"
+  key_name_var="${key_name^^}"
+  key_name_var="${key_name_var//-/_}"
+  ip_addr="${!iface_var}"
+  key="${!key_name_var}"
 
-  key_value="${!key_var}"
-  ip_addr="${!iface_view}"
-
-  key_value_name="${key_value^^}"
-  key_name="${!var_value_name}"
-
+  echo "view:${view}"
   echo ip_addr $ip_addr
-  echo key_var $key_var
   echo key_name $key_name
-  echo key_value_name $key_value_name
-  echo key_value $key_value
+  echo key $key
+  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+    echo "NOT FOUND!"
+    exit 1
+  fi)"
 done
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
