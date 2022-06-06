@@ -45,9 +45,9 @@ function config_check() {
     fi
 
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-      echo "view       : ${view}"
-      echo "  ip_addr  : $ip_addr}"
-      echo "  key_name : ${key_name}"
+      echo "view       : $view"
+      echo "  ip_addr  : $ip_addr"
+      echo "  key_name : $key_name"
       echo "  key      : ******"
     fi
   done
