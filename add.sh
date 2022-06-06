@@ -38,10 +38,10 @@ for view in ${views[@]}; do
   fi
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    echo "view       : ${view}"
-    echo "  ip_addr  : $ip_addr}"
-    echo "  key_name : ${key_name}"
-    echo "  key      : ******"
+    echo "view ................... : ${view}"
+    echo "  ip_addr .............. : $ip_addr}"
+    echo "  key_name ............. : ${key_name}"
+    echo "  key .................. : ******"
   fi
 
   #check to see if we have a CDS key published

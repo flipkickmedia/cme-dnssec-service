@@ -29,10 +29,10 @@ for view in ${views[@]}; do
   fi
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    echo "view       : ${view}"
-    echo "  ip_addr  : $ip_addr}"
-    echo "  key_name : ${key_name}"
-    echo "  key      : ******"
+    echo "view ................... : ${view}"
+    echo "  ip_addr .............. : $ip_addr}"
+    echo "  key_name ............. : ${key_name}"
+    echo "  key .................. : ******"
   fi
 
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "dsset-${DOMAIN}." >/dev/null
