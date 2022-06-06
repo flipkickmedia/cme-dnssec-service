@@ -37,14 +37,14 @@ for view in ${views[@]}; do
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     cat <<EOF
-#server ${NS_SERVER}
-#zone ${DOMAIN}
-#$(cat ./nsup)
-#send
+server ${NS_SERVER}
+zone ${DOMAIN}
+$(cat ./nsup)
+send
 EOF
   fi
 
-  nsupdate -y hmac-sha512:${view}:${key} < <(
+  nsupdate -y hmac-sha512:${key_name}:${key} < <(
     cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
