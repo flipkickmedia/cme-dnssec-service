@@ -118,7 +118,6 @@ for view in ${views[@]}; do
     echo "view:${view}"
     echo ip_addr $ip_addr
     echo key_name $key_name
-    echo key $key
     echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
       echo "NOT FOUND!"
       exit 1
