@@ -100,42 +100,7 @@ if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
   echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
 fi
 
-for view in ${views[@]}; do
-  view_var="${view^^}"
-  iface_var="${view_var//-/_}_IFACE"
-  key_var="${view_var//-/_}_KEY_NAME"
-  key_name="${!key_var}"
-  key_name_var="${key_name^^}"
-  key_name_var="${key_name_var//-/_}"
-  iface=$(route | tail -n-1 | awk '{print $8}')
-  ip_addr="${!iface_var}"
-  if ! ping -c1 -w3 $ip_addr >/dev/null 2>&1; then
-    # @todo get network inteface
-    ip a a $ip_addr dev $iface
-  fi
-  key="${!key_name_var}"
-  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    echo "view:${view}"
-    echo ip_addr $ip_addr
-    echo key_name $key_name
-    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-      echo "NOT FOUND!"
-      exit 1
-    fi)"
-  fi
-
-  if [[ ! -f ${CONF_PATH}/rndc.${view}.conf ]]; then
-    echo "${CONF_PATH}/rndc.${view}.conf not found! Exiting.."
-    exit 1
-  fi
-
-  if [[ ! -f ${CONF_PATH}/rndc.${view}.key ]]; then
-    echo "${CONF_PATH}/rndc.${view}.key not found! Exiting.."
-    exit 1
-  fi
-
-  
-done
+config_check
 
 trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 
