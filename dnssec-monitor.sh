@@ -89,12 +89,12 @@ function trap_exit() {
 }
 
 # print config
+echo "NS_SERVER:${NS_SERVER}"
 echo "DATA_PATH:${DATA_PATH}"
 echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
+echo "CONF_PATH:${CONF_PATH}"
 echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
 echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
-echo "NS_SERVER:${NS_SERVER}"
-echo "CONF_PATH:${CONF_PATH}"
 echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
 
 for view in ${views[@]}; do
