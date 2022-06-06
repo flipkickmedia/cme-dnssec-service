@@ -1,8 +1,8 @@
-# cme-bind-dnssec
+# cme-dnsec-service
 
 ## Overview
 
-Some scripts to manage DNSSEC on BIND v9.18.1 to work with DNSSEC DS/CDS keys.
+Some scripts to manage DNSSEC on BIND v9.19.1 to work with DNSSEC DS/CDS keys.
 
 ## Description
 
@@ -51,7 +51,7 @@ If your server has a [split horizon](https://www.google.com/search?q=split+horiz
 
 In the example config provided you can see a BIND setup with two views, externals-master and internals-master.
 
-***Note***: You will need the associated keys and ACLs setup in BIND in order for the interface options to work correctly.
+**_Note_**: You will need the associated keys and ACLs setup in BIND in order for the interface options to work correctly.
 
 ## Logging
 

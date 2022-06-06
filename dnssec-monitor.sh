@@ -6,7 +6,20 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . ${DIR}/lib.sh
 
 # check config matches
-# @todo
+echo "DATA_PATH:${DATA_PATH}"
+echo "DSPROCESS_PATH:${CDPROCESS_PATH}"
+echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
+echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
+echo "NS_SERVER:${NS_SERVER}"
+echo "CONF_PATH:${CONFPATH}"
+echo "VIEWS:${VIEWS[@]}"
+echo "EXTERNALS_MASTER_IFACE:${EXTERNALS_MASTER_IFACE}"
+echo "INTERNALS_MASTER_IFACE:${INTERNALS_MASTER_IFACE}"
+echo "EXTERNALS_MASTER_KEY_NAME:${EXTERNALS_MASTER_KEY_NAME}"
+echo "INTERNALS_MASTER_KEY_NAME$:${INTERNALS_MASTER_KEY_NAME}"
+echo "EXTERNALS_RNDC_KEY:$(if [[ -n ${EXTERNALS_RNDC_KEY} ]]; then echo '******'; else echo "NOT FOUND!"; fi)"
+echo "INTERNALS_RNDC_KEY:$(if [[ -n ${EXTERNALS_RNDC_KEY} ]]; then echo '******'; else echo "NOT FOUND!"; fi)"
+echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
@@ -20,6 +33,47 @@ if [[ $1 == '--clean' ]]; then
 
   shopt -s extglob
   while (true); do
+    for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
+      if [ ! -f "$dsprocess" ]; then
+        sleep 5
+        continue
+      fi
+      if [[ $(date -r $dsprocess "+%s") -lt $(($(date +%s) - 60)) ]]; then
+        locked_domain=$(basename $dsprocess)
+        log "removing dsprocess lock for ${locked_domain//\.dsprocess/}"
+        rm $dsprocess
+      fi
+    done
+    sleep 5
+  done
+fi
+
+# stop repeated additions via nsupdate as views are handled in the same scope as the main process
+if [[ $1 == '--monitor-external' ]]; then
+  function trap_exit() {
+    log "terminating external CDS check"
+    exit 0
+  }
+
+  while IFS= read -r line; do
+    readarray -td: ext_dns <<<"$line"
+    ds="$(dig "@${NS_SERVER}" +short ${ext_dns[0]} DS)"
+    if [[ "$ds" != "${ext_dns[1]}" ]]; then
+      ${DIR}/update.sh ${ext_dns[0]}
+    fi
+  done <"$EXTERNAL_DOMAIN_LIST"
+
+  trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+
+  shopt -s extglob
+  while (true); do
+    if [[ -n $retry && $retry -gt $(date %+s) ]]; then
+      sleep 5
+      continue
+    fi
+
+    start=$(date +%s)
+    retry=$(($start + $EXTERNAL_REFRESH))
     for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
       if [ ! -f "$dsprocess" ]; then
         sleep 5

@@ -51,6 +51,6 @@ send
 EOF
   )
   rm nsup
-  rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
-  rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${VIEWS[$i]}
+  rndc -k ./rndc.${view}.key -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
+  rndc -k ./rndc.${view}.key -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
 done
