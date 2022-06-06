@@ -63,7 +63,7 @@ add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
     )
-    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${view}
-    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${view}
+    rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
+    rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
   fi
 done

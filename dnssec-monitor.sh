@@ -88,15 +88,17 @@ function trap_exit() {
   exit 0
 }
 
-# print config
-echo "NS_SERVER:${NS_SERVER}"
-echo "DATA_PATH:${DATA_PATH}"
-echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
-echo "CONF_PATH:${CONF_PATH}"
-echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
-echo "KEY_PATH:${KEY_PATH}"
-echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
-echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
+if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+  # print config
+  echo "NS_SERVER:${NS_SERVER}"
+  echo "DATA_PATH:${DATA_PATH}"
+  echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
+  echo "CONF_PATH:${CONF_PATH}"
+  echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
+  echo "KEY_PATH:${KEY_PATH}"
+  echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
+  echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
+fi
 
 for view in ${views[@]}; do
   view_var="${view^^}"
