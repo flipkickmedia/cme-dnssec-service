@@ -31,15 +31,16 @@ for view in ${views[@]}; do
   key_name_var="${key_name_var//-/_}"
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
-
-  echo "view:${view}"
-  echo ip_addr $ip_addr
-  echo key_name $key_name
-  echo key $key
-  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-    echo "NOT FOUND!"
-    exit 1
-  fi)"
+  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+    echo "view:${view}"
+    echo ip_addr $ip_addr
+    echo key_name $key_name
+    echo key $key
+    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+      echo "NOT FOUND!"
+      exit 1
+    fi)"
+  fi
 done
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process

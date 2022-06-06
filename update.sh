@@ -10,6 +10,7 @@ DOMAIN=$1
 PARENT_DOMAIN=$(parent_domain $1)
 TTL=60
 
+log "handling CDS publish - running nsupdate for domain:${DOMAIN}"
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
 for view in ${views[@]}; do
@@ -28,14 +29,13 @@ for view in ${views[@]}; do
   echo key $key
   echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
     echo "NOT FOUND!"
-    exit 1
+    continue
   fi)"
 
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "dsset-${DOMAIN}." >/dev/null
   dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "file-${DOMAIN}" >/dev/null
   dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "file-${DOMAIN}" -d . -i.orig "${DOMAIN}" | tee ./nsup >/dev/null
 
-  log "handling CDS publish - running nsupdate for domain:${DOMAIN} view:${view} key:${key_name}"
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     cat <<EOF
 #server ${NS_SERVER}

@@ -19,7 +19,7 @@ for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
   fi
 done
 f=${f/\.state/\.key}
-
+log "handling KSK publish - running nsupdate ${DOMAIN}"
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
 for view in ${views[@]}; do
@@ -31,20 +31,20 @@ for view in ${views[@]}; do
   key_name_var="${key_name_var//-/_}"
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
-
-  echo "view:${view}"
-  echo ip_addr $ip_addr
-  echo key_name $key_name
-  echo key $key
-  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-    echo "NOT FOUND!"
-    exit 1
-  fi)"
+  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+    echo "view:${view}"
+    echo ip_addr $ip_addr
+    echo key_name $key_name
+    echo key $key
+    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+      echo "NOT FOUND!"
+      continue
+    fi)"
+  fi
   #check to see if we have a CDS key published
   cds=$(dig -b $ip_addr @${NS_SERVER} +noall +answer $DOMAIN CDS)
   if [[ $cds == "" ]]; then
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
-    log "handling KSK publish - running nsupdate for view:${view} key:${key_name}"
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       cat <<EOF
 nsupdate -y hmac-sha512:${key_name}:${key_value}
