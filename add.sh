@@ -47,23 +47,23 @@ for view in ${views[@]}; do
     ds=$(dnssec-dsfromkey -a SHA-384 ${KEY_PATH}/K${DOMAIN}.+014+${id}.key | awk '{print $4" "$5" "$6" "$7}')
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       cat <<EOF
-nsupdate -y hmac-sha512:${key_name}:${key_value}
+nsupdate -y hmac-sha512:${key_name}:${key}
 server ${NS_SERVER}
-zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
+zone ${PARENT_DOMAIN}. in ${view}
 add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
     fi
 
-    nsupdate -y hmac-sha512:${key_name}:${key_value} < <(
+    nsupdate -y hmac-sha512:${key_name}:${key} < <(
       cat <<EOF
 server ${NS_SERVER}
-zone ${PARENT_DOMAIN}. in ${VIEWS[$i]}
+zone ${PARENT_DOMAIN}. in ${view}
 add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
     )
-    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${VIEWS[$i]}
-    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${VIEWS[$i]}
+    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${PARENT_DOMAIN} in ${view}
+    rndc -k ./rndc.${view}.key -c ./rndc.${view}.conf notify ${DOMAIN} in ${view}
   fi
 done
