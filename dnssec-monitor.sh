@@ -7,36 +7,6 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
 readarray -td: views <<<"$VIEWS"
 
-# print config
-echo "DATA_PATH:${DATA_PATH}"
-echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
-echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
-echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
-echo "NS_SERVER:${NS_SERVER}"
-echo "CONF_PATH:${CONF_PATH}"
-echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
-
-for view in ${views[@]}; do
-  view_var="${view^^}"
-  iface_var="${view_var//-/_}_IFACE"
-  key_var="${view_var//-/_}_KEY_NAME"
-  key_name="${!key_var}"
-  key_name_var="${key_name^^}"
-  key_name_var="${key_name_var//-/_}"
-  ip_addr="${!iface_var}"
-  key="${!key_name_var}"
-  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    echo "view:${view}"
-    echo ip_addr $ip_addr
-    echo key_name $key_name
-    echo key $key
-    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-      echo "NOT FOUND!"
-      exit 1
-    fi)"
-  fi
-done
-
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
 
@@ -118,15 +88,38 @@ function trap_exit() {
   exit 0
 }
 
-#check interfaces for views
+# print config
+echo "DATA_PATH:${DATA_PATH}"
+echo "DSPROCESS_PATH:${DSPROCESS_PATH}"
+echo "BIND_LOG_PATH:${BIND_LOG_PATH}"
+echo "CME_DNSSEC_MONITOR_DEBUG:${CME_DNSSEC_MONITOR_DEBUG}"
+echo "NS_SERVER:${NS_SERVER}"
+echo "CONF_PATH:${CONF_PATH}"
+echo "LOGGER_FLAGS:${LOGGER_FLAGS}"
+
 for view in ${views[@]}; do
-  var="${view^^}"
-  var="${var//-/_}_IFACE"
-  ip_addr="${!var}"
+  view_var="${view^^}"
+  iface_var="${view_var//-/_}_IFACE"
+  key_var="${view_var//-/_}_KEY_NAME"
+  key_name="${!key_var}"
+  key_name_var="${key_name^^}"
+  key_name_var="${key_name_var//-/_}"
   iface=$(route | tail -n-1 | awk '{print $8}')
+  ip_addr="${!iface_var}"
   if ! ping -c1 -w3 $ip_addr >/dev/null 2>&1; then
     # @todo get network inteface
     ip a a $ip_addr dev $iface
+  fi
+  key="${!key_name_var}"
+  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+    echo "view:${view}"
+    echo ip_addr $ip_addr
+    echo key_name $key_name
+    echo key $key
+    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
+      echo "NOT FOUND!"
+      exit 1
+    fi)"
   fi
 done
 
