@@ -23,13 +23,17 @@ for view in ${views[@]}; do
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
 
-  echo "view:${view}"
-  echo ip_addr $ip_addr
-  echo key_name $key_name
-  echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-    echo "NOT FOUND!"
+  if [[ -z $key ]]; then
+    echo "key NOT FOUND!..processing next view..."
     continue
-  fi)"
+  fi
+
+  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+    echo "view       : ${view}"
+    echo "  ip_addr  : $ip_addr}"
+    echo "  key_name : ${key_name}"
+    echo "  key      : ******"
+  fi
 
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "dsset-${DOMAIN}." >/dev/null
   dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "file-${DOMAIN}" >/dev/null

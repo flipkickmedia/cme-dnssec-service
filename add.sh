@@ -31,15 +31,19 @@ for view in ${views[@]}; do
   key_name_var="${key_name_var//-/_}"
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
-  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    echo "view:${view}"
-    echo ip_addr $ip_addr
-    echo key_name $key_name
-    echo "${key_name} :$(if [[ -n ${key} ]]; then echo '******'; else
-      echo "NOT FOUND!"
-      continue
-    fi)"
+
+  if [[ -n ${key} ]]; then
+    echo "key NOT found!...processing next view..."
+    continue
   fi
+
+  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+    echo "view       : ${view}"
+    echo "  ip_addr  : $ip_addr}"
+    echo "  key_name : ${key_name}"
+    echo "  key      : ******"
+  fi
+
   #check to see if we have a CDS key published
   cds=$(dig -b $ip_addr @${NS_SERVER} +noall +answer $DOMAIN CDS)
   if [[ $cds == "" ]]; then
