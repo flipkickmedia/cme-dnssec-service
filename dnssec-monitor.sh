@@ -49,7 +49,7 @@ if [[ $1 == '--monitor-external' ]]; then
     fi
   done <"$EXTERNAL_DOMAIN_LIST"
 
-  trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+  trap "trap_exit" SIGINT SIGKILL SIGSTOP SIGHUP 15
 
   shopt -s extglob
   while (true); do
