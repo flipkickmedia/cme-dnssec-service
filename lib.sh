@@ -13,7 +13,7 @@ function log() {
   /usr/bin/logger ${LOGGER_FLAGS} "$@"
 }
 
-function config_check() {
+function view_config_check() {
   for view in ${views[@]}; do
     view_var="${view^^}"
     iface_var="${view_var//-/_}_IFACE"
@@ -44,10 +44,6 @@ function config_check() {
       exit 1
     fi
 
-    if [[ ! -f ${EXTERNAL_DOMAINS_LIST} ]]; then
-      touch "${EXTERNAL_DOMAINS_LIST}"
-    fi
-
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       echo "view ................... : $view"
       echo "  ip_addr .............. : $ip_addr"
@@ -61,6 +57,10 @@ if [[ -d ${DSPROCESS_PATH} ]]; then
   mkdir -p ${DSPROCESS_PATH}
   chown root:root ${DSPROCESS_PATH}
   chmod 770 ${DSPROCESS_PATH}
+fi
+
+if [[ ! -f ${DSPROCESS_PATH}/${EXTERNAL_DOMAINS_LIST} ]]; then
+  cp "${DATA_PATH}/${EXTERNAL_DOMAINS_LIST}" "${DSPROCESS_PATH}/${EXTERNAL_DOMAINS_LIST}"
 fi
 
 alias log="/usr/bin/logger ${LOGGER_FLAGS}"

@@ -104,7 +104,7 @@ if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
   echo "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
 fi
 
-config_check
+view_config_check
 
 trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 
