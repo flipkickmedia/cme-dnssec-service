@@ -25,9 +25,16 @@ while (true); do
     dig +short $domain NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain" |
       while IFS= read -r server; do
         touch "${DSPROCESS_PATH}/external-cds-$domain-NS-A"
-        dig @"${NS_SERVER}" +short "$server" PTR | sort | tee "${DSPROCESS_PATH}/external-cds-$domain-NS-A" >/dev/null
-        echo" running: tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-NS-A""
-        a_record=$(tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
+        dig @"$server" +short "$domain" CDS | tee "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
+        if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+          cat "${DSPROCESS_PATH}/external-cds-$domain-CDS"
+          echo "running: tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-CDS""
+        fi
+        if [[ $(stat --printf="%s" "${DSPROCESS_PATH}/external-cds-$domain-CDS") -gt 0 ]]; then
+          a_record=$(tail -n1 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
+        else
+          echo empty file
+        fi
         echo test:$a_record
       done
 
