@@ -4,6 +4,9 @@
 # run update.sh with domain
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+if [[ ${CME_DNSSEC_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
+  . ${DIR}/dnssec-monitor.env
+fi
 . ${DIR}/lib.sh
 
 readarray -td: views <<<"$VIEWS"
