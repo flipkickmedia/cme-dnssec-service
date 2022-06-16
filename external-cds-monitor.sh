@@ -30,6 +30,6 @@ while (true); do
         echo $ns_server
       done
 
-  done <"$EXTERNAL_DOMAINS_LIST"
+  done <"${DSPROCESS_PATH}/$EXTERNAL_DOMAINS_LIST"
   sleep $((600))
 done
