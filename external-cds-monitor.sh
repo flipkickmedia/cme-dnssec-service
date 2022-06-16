@@ -25,7 +25,7 @@ while (true); do
     dig +short $domain NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain" |
       while IFS= read -r ns_server; do
         touch "${DSPROCESS_PATH}/external-cds-$domain-NS-A"
-        dig +short $ns_server NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain-NS-A" >/dev/null
+        dig +short "@$NS_SERVER" $domain NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain-NS-A" >/dev/null
         ns_server=$(tail -n 1 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
         echo $ns_server
       done
