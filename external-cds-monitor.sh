@@ -2,7 +2,7 @@
 # run cme-external-cds-monitor.sh
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-if [[ ${CME_DNSSEC_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
+if [[ ${CME_DNSSEC_EXTERNAL_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
   . ${DIR}/dnssec-monitor.env
 fi
 . ${DIR}/lib.sh
@@ -25,11 +25,11 @@ while (true); do
     dig +short $domain NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain" |
       while IFS= read -r server; do
         touch "${DSPROCESS_PATH}/external-cds-$domain-NS-A"
-        if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+        if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
           echo "running: dig @"$server" +short "$domain" CDS"
         fi
         dig @"$server" +short "$domain" CDS | tee "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
-        if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+        if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
           cat "${DSPROCESS_PATH}/external-cds-$domain-CDS"
           echo "running: tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-CDS""
         fi
