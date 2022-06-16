@@ -34,12 +34,12 @@ function config_check() {
       continue
     fi
 
-    if [[ ! -f ${CONF_PATH}/rndc.${view}.conf ]]; then
+    if [[ ! -f "${CONF_PATH}/rndc.${view}.conf" ]]; then
       echo "${CONF_PATH}/rndc.${view}.conf not found! Exiting.."
       exit 1
     fi
 
-    if [[ ! -f ${CONF_PATH}/rndc.${view}.key ]]; then
+    if [[ ! -f "${CONF_PATH}/rndc.${view}.key" ]]; then
       echo "${CONF_PATH}/rndc.${view}.key not found! Exiting.."
       exit 1
     fi
