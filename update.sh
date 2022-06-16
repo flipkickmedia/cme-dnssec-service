@@ -35,6 +35,14 @@ for view in ${views[@]}; do
     echo "  key .................. : ******"
   fi
 
+  if [[ ! -d /tmp/cme-dnssec-monitor ]]; then
+    mkdir "/tmp/cme-dnssec-monitor"
+    chmod 770
+    touch "/tmp/cme-dnssec-monitor/dsset-${DOMAIN}."
+    touch "/tmp/cme-dnssec-monitor/file-${DOMAIN}"
+    touch "/tmp/cme-dnssec-monitor/nsup"
+  fi
+
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/dsset-${DOMAIN}." >/dev/null
   dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "/tmp/cme-dnssec-monitor/file-${DOMAIN}" >/dev/null
   dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "/tmp/cme-dnssec-monitor/file-${DOMAIN}" -d . -i.orig "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/nsup" >/dev/null
