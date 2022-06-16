@@ -33,7 +33,12 @@ for view in ${views[@]}; do
   key="${!key_name_var}"
 
   if [[ -n ${key} ]]; then
-    echo "key NOT found!...processing next view..."
+    echo "key parameter NOT provided!...processing next view..."
+    continue
+  fi
+
+  if [[ ! -f "${KEY_PATH}/K${DOMAIN}.+014+${id}.key" ]]; then
+    echo "key file ${KEY_PATH}/K${DOMAIN}.+014+${id}.key NOT found!...processing next view..."
     continue
   fi
 
