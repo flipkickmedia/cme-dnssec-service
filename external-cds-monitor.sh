@@ -38,7 +38,7 @@ while (true); do
         else
           echo empty file
         fi
-        echo test:$a_record
+        echo test:$server
       done
 
   done <"${DSPROCESS_PATH}/$EXTERNAL_DOMAINS_LIST"
