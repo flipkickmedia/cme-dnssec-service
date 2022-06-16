@@ -2,7 +2,7 @@
 # installer for cme-dnssec-monitor / external-cds-monitor
 
 # get scripts
-if [[ -d /usr/local/sbin/cme-bind-dnssec ]]; then
+if [[ ! -d /usr/local/sbin/cme-bind-dnssec ]]; then
   sudo git clone ssh://git.flipkick.media/cme/cme-bind-dnssec /usr/local/sbin/cme-bind-dnssec
 else
   (
