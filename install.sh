@@ -30,7 +30,7 @@ chmod 600 /etc/cme/dnssec-monitor.env
 #setup service
 sudo systemctl enable cme-dnssec-monitor.service
 sudo systemctl enable cme-external-cds-monitor.service
-sudo systemctl start cme-dnssec-monitor.service
-sudo systemctl start cme-external-cds-monitor.service
+sudo systemctl restart cme-dnssec-monitor.service
+sudo systemctl restart cme-external-cds-monitor.service
 sudo systemctl restart named
 exit 0
