@@ -2,7 +2,7 @@
 # run cme-external-cds-monitor.sh
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
+echo DIR:$DIR
 if [[ ${CME_DNSSEC_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
   . ${DIR}/dnssec-monitor.env
 fi
