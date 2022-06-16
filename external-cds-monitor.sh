@@ -17,6 +17,10 @@ function create_time_offsets() {
   DATE_1D=$(($1 + 86400))
 }
 
+if [[ ! -f ${EXTERNAL_DOMAINS_LIST} ]]; then
+  touch "${EXTERNAL_DOMAINS_LIST}"
+fi
+
 log "monitor running on ${monitor_pid} for external CDS updates"
 
 # external domains monitoring - check every 30mins for DS record updates
