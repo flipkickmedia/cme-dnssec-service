@@ -53,10 +53,10 @@ function config_check() {
   done
 }
 
-if [[ -d /tmp/cme-dnssec-monitor ]]; then
-  mkdir -p /tmp/cme-dnssec-monitor
-  chown root:root /tmp/cme-dnssec-monitor
-  chmod 770 /tmp/cme-dnssec-monitor
+if [[ -d ${DSPROCESS_PATH} ]]; then
+  mkdir -p ${DSPROCESS_PATH}
+  chown root:root ${DSPROCESS_PATH}
+  chmod 770 ${DSPROCESS_PATH}
 fi
 
 alias log="/usr/bin/logger ${LOGGER_FLAGS}"
