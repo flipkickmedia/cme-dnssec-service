@@ -35,23 +35,23 @@ for view in ${views[@]}; do
     echo "  key .................. : ******"
   fi
 
-  if [[ ! -d /tmp/cme-dnssec-monitor ]]; then
-    mkdir "/tmp/cme-dnssec-monitor"
+  if [[ ! -d ${DSPROCESS_PATH} ]]; then
+    mkdir "${DSPROCESS_PATH}"
     chmod 770
-    touch "/tmp/cme-dnssec-monitor/dsset-${DOMAIN}."
-    touch "/tmp/cme-dnssec-monitor/file-${DOMAIN}"
-    touch "/tmp/cme-dnssec-monitor/nsup"
+    touch "${DSPROCESS_PATH}/dsset-${DOMAIN}."
+    touch "${DSPROCESS_PATH}/file-${DOMAIN}"
+    touch "${DSPROCESS_PATH}/nsup"
   fi
 
-  dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/dsset-${DOMAIN}." >/dev/null
-  dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "/tmp/cme-dnssec-monitor/file-${DOMAIN}" >/dev/null
-  dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "/tmp/cme-dnssec-monitor/file-${DOMAIN}" -d . -i.orig "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/nsup" >/dev/null
+  dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "${DSPROCESS_PATH}/dsset-${DOMAIN}." >/dev/null
+  dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "${DSPROCESS_PATH}/file-${DOMAIN}" >/dev/null
+  dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "${DSPROCESS_PATH}/file-${DOMAIN}" -d "${DSPROCESS_PATH}/." -i"${DSPROCESS_PATH}/.orig" "${DOMAIN}" | tee "${DSPROCESS_PATH}/nsup" >/dev/null
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
-$(cat /tmp/cme-dnssec-monitor/nsup)
+$(cat ${DSPROCESS_PATH}/nsup)
 send
 EOF
   fi
@@ -60,11 +60,13 @@ EOF
     cat <<EOF
 server ${NS_SERVER}
 zone ${DOMAIN}
-$(cat /tmp/cme-dnssec-monitor/nsup)
+$(cat ${DSPROCESS_PATH}/nsup)
 send
 EOF
   )
-  rm /tmp/cme-dnssec-monitor/nsup
+  rm "${DSPROCESS_PATH}/nsup"
+  log "notifying ${PARENT_DOMAIN} in ${view}"
   rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
+  log "notifying ${DOMAIN} in ${view}"
   rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
 done
