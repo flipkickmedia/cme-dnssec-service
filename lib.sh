@@ -44,6 +44,10 @@ function config_check() {
       exit 1
     fi
 
+    if [[ ! -f ${EXTERNAL_DOMAINS_LIST} ]]; then
+      touch "${EXTERNAL_DOMAINS_LIST}"
+    fi
+
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
       echo "view ................... : $view"
       echo "  ip_addr .............. : $ip_addr"
