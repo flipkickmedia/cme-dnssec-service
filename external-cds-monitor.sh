@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run cme-external-cds-monitor.sh
-monitor_pid=$!
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 echo DIR:$DIR
 if [[ ${CME_DNSSEC_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
@@ -17,7 +17,7 @@ function create_time_offsets() {
   DATE_1D=$(($1 + 86400))
 }
 
-log "monitor running on ${monitor_pid} for external CDS updates"
+log "monitor running on $$ for external CDS updates"
 
 # external domains monitoring - check every 30mins for DS record updates
 while (true); do
