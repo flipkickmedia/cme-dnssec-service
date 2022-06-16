@@ -33,4 +33,4 @@ sudo systemctl enable cme-external-cds-monitor.service
 sudo systemctl start cme-dnssec-monitor.service
 sudo systemctl start cme-external-cds-monitor.service
 sudo systemctl restart named
-return 0
+exit 0
