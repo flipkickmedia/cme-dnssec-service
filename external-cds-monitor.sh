@@ -23,12 +23,12 @@ while (true); do
     log "external CDS check:$domain"
     touch "${DSPROCESS_PATH}/external-cds-$domain"
     dig +short $domain NS | sort | tee "${DSPROCESS_PATH}/external-cds-$domain" |
-      while IFS= read -r ns_server; do
+      while IFS= read -r server; do
         touch "${DSPROCESS_PATH}/external-cds-$domain-NS-A"
-        dig +short "@${NS_SERVER}" "${ns_server}" PTR | sort | tee "${DSPROCESS_PATH}/external-cds-$domain-NS-A" >/dev/null
+        dig @"${NS_SERVER}" +short "$server" PTR | sort | tee "${DSPROCESS_PATH}/external-cds-$domain-NS-A" >/dev/null
         echo" running: tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-NS-A""
-        ns_server=$(tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
-        echo test:$ns_server
+        a_record=$(tail -n0 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
+        echo test:$a_record
       done
 
   done <"${DSPROCESS_PATH}/$EXTERNAL_DOMAINS_LIST"
