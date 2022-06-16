@@ -56,7 +56,7 @@ function view_config_check() {
 if [[ -d ${DSPROCESS_PATH} ]]; then
   mkdir -p ${DSPROCESS_PATH}
   chown root:root ${DSPROCESS_PATH}
-  chmod 770 ${DSPROCESS_PATH}
+  chmod 777 ${DSPROCESS_PATH}
 fi
 
 if [[ ! -f ${DSPROCESS_PATH}/${EXTERNAL_DOMAINS_LIST} ]]; then
