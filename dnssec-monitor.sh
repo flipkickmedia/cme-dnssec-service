@@ -2,6 +2,7 @@
 # dnssec-monitor.sh
 # monitor named log output for CDS published string
 # run update.sh with domain
+monitor_pid=$!
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 . ${DIR}/lib.sh
 
@@ -105,7 +106,7 @@ config_check
 trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} ${DIR}/dnssec-monitor.sh --clean &
-monitor_pid=$!
+
 log "monitor running on ${monitor_pid} for CDS/KSK publish events"
 
 # main monitoring/update
