@@ -32,7 +32,7 @@ for view in ${views[@]}; do
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
 
-  if [[ -n ${key} ]]; then
+  if [[ -z ${key} ]]; then
     echo "key parameter NOT provided!...processing next view..."
     continue
   fi
