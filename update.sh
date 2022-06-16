@@ -45,7 +45,7 @@ for view in ${views[@]}; do
 
   dig -b ${ip_addr} "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/dsset-${DOMAIN}." >/dev/null
   dig -b ${ip_addr} "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "/tmp/cme-dnssec-monitor/file-${DOMAIN}" >/dev/null
-  dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "/tmp/cme-dnssec-monitor/file-${DOMAIN}" -d . -i.orig "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/nsup" >/dev/null
+  dnssec-cds -a SHA-384 -s-86400 -T "${TTL}" -u -i -f "/tmp/cme-dnssec-monitor/file-${DOMAIN}" -d "/tmp/cme-dnssec-monitor/." -i.orig "${DOMAIN}" | tee "/tmp/cme-dnssec-monitor/nsup" >/dev/null
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     cat <<EOF
