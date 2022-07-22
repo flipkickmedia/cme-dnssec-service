@@ -23,10 +23,10 @@ for view in "${views[@]}"; do
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
 
-  if [[ -z $key ]]; then
-    echo "key NOT FOUND!..processing next view..."
-    continue
-  fi
+  # if [[ -z $key ]]; then
+  #   echo "key NOT FOUND!..processing next view..."
+  #   continue
+  # fi
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     echo "view ................... : ${view}"
