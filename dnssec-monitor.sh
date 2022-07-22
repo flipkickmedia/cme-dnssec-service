@@ -15,7 +15,7 @@ if [[ $1 == '--clean' ]]; then
     exit 0
   }
 
-  trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+  trap "trap_exit" SIGINT 15
 
   shopt -s extglob
   while (true); do
@@ -27,7 +27,7 @@ if [[ $1 == '--clean' ]]; then
       if [[ $(date -r $dsprocess "+%s") -lt $(($(date +%s) - 60)) ]]; then
         locked_domain=$(basename $dsprocess)
         log "removing dsprocess lock for ${locked_domain//\.dsprocess/}"
-        rm $dsprocess
+        rm "$dsprocess"
       fi
     done
     sleep 5
@@ -45,11 +45,11 @@ if [[ $1 == '--monitor-external' ]]; then
     readarray -td: ext_dns <<<"$line"
     ds="$(dig "@${NS_SERVER}" +short ${ext_dns[0]} DS)"
     if [[ "$ds" != "${ext_dns[1]}" ]]; then
-      ${DIR}/update.sh ${ext_dns[0]}
+      ${DIR}/update.sh "${ext_dns[0]}"
     fi
   done <"$EXTERNAL_DOMAIN_LIST"
 
-  trap "trap_exit" SIGINT SIGKILL SIGSTOP SIGHUP 15
+  trap "trap_exit" SIGINT SIGHUP 15
 
   shopt -s extglob
   while (true); do
@@ -59,16 +59,16 @@ if [[ $1 == '--monitor-external' ]]; then
     fi
 
     start=$(date +%s)
-    retry=$(($start + $EXTERNAL_REFRESH))
+    retry=$((start + EXTERNAL_REFRESH))
     for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
       if [ ! -f "$dsprocess" ]; then
         sleep 5
         continue
       fi
-      if [[ $(date -r $dsprocess "+%s") -lt $(($(date +%s) - 60)) ]]; then
-        locked_domain=$(basename $dsprocess)
+      if [[ $(date -r "$dsprocess" "+%s") -lt $(($(date +%s) - 60)) ]]; then
+        locked_domain=$(basename "$dsprocess")
         log "removing dsprocess lock for ${locked_domain//\.dsprocess/}"
-        rm $dsprocess
+        rm "$dsprocess"
       fi
     done
     sleep 5
@@ -76,10 +76,10 @@ if [[ $1 == '--monitor-external' ]]; then
 fi
 
 function trap_exit() {
-  if [[ -n $monitor_pid && -n $(ps -p $monitor_pid) ]]; then
+  if [[ -n $monitor_pid && -n $(ps -p "$monitor_pid") ]]; then
     log "monitor terminating on PID:$monitor_pid"
-    kill -1 $monitor_pid
-    wait $monitor_pid
+    kill -1 "$monitor_pid"
+    wait "$monitor_pid"
   fi
   if [[ -n $tail_pid && -n $(ps -p $tail_pid) ]]; then
     kill -1 $tail_pid
@@ -102,7 +102,7 @@ fi
 
 config_check
 
-trap "trap_exit" SIGINT SIGKILL SIGSTOP 15
+trap "trap_exit" SIGINT 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} ${DIR}/dnssec-monitor.sh --clean &
 monitor_pid=$!

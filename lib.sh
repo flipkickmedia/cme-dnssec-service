@@ -14,7 +14,7 @@ function log() {
 }
 
 function config_check() {
-  for view in ${views[@]}; do
+  for view in "${views[@]}"; do
     view_var="${view^^}"
     iface_var="${view_var//-/_}_IFACE"
     key_var="${view_var//-/_}_KEY_NAME"

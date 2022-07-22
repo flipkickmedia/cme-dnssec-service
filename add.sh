@@ -14,14 +14,14 @@ TTL=60
 for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
   if grep -q "KSK: yes" $f; then
     if ! grep -q "Successor:" $f; then
-      id=$(echo $f | grep -Po '\d+' | tail -n 1)
+      id=$(echo "$f" | grep -Po '\d+' | tail -n 1)
     fi
   fi
 done
 f=${f/\.state/\.key}
 log "handling KSK publish - running nsupdate ${DOMAIN}"
 #run updates for all views
-readarray -td: views <<<"$VIEWS"
+readarray -td: views <<<"${VIEWS}"
 for view in ${views[@]}; do
   view_var="${view^^}"
   iface_var="${view_var//-/_}_IFACE"
