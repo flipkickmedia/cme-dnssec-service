@@ -13,8 +13,8 @@ function log() {
   /usr/bin/logger ${LOGGER_FLAGS} "$@"
 }
 
-function config_check() {
-  for view in "${views[@]}"; do
+function view_config_check() {
+  for view in ${views[@]}; do
     view_var="${view^^}"
     iface_var="${view_var//-/_}_IFACE"
     key_var="${view_var//-/_}_KEY_NAME"
@@ -34,12 +34,12 @@ function config_check() {
       continue
     fi
 
-    if [[ ! -f ${CONF_PATH}/rndc.${view}.conf ]]; then
+    if [[ ! -f "${CONF_PATH}/rndc.${view}.conf" ]]; then
       echo "${CONF_PATH}/rndc.${view}.conf not found! Exiting.."
       exit 1
     fi
 
-    if [[ ! -f ${CONF_PATH}/rndc.${view}.key ]]; then
+    if [[ ! -f "${CONF_PATH}/rndc.${view}.key" ]]; then
       echo "${CONF_PATH}/rndc.${view}.key not found! Exiting.."
       exit 1
     fi
@@ -53,10 +53,14 @@ function config_check() {
   done
 }
 
-if [[ -d /tmp/cme-dnssec-monitor ]]; then
-  mkdir -p /tmp/cme-dnssec-monitor
-  chown root:root /tmp/cme-dnssec-monitor
-  chmod 770 /tmp/cme-dnssec-monitor
+if [[ -d ${DSPROCESS_PATH} ]]; then
+  mkdir -p ${DSPROCESS_PATH}
+  chown root:root ${DSPROCESS_PATH}
+  chmod 777 ${DSPROCESS_PATH}
+fi
+
+if [[ ! -f "${DSPROCESS_PATH}/${EXTERNAL_DOMAINS_LIST}" ]]; then
+  cp "${DATA_PATH}/${EXTERNAL_DOMAINS_LIST}" "${DSPROCESS_PATH}/${EXTERNAL_DOMAINS_LIST}"
 fi
 
 alias log="/usr/bin/logger ${LOGGER_FLAGS}"
