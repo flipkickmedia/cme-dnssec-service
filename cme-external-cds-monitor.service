@@ -1,10 +1,10 @@
 [Unit]
 Description=BindDNSSECMonitor
-Before=named.service
+After=cme-dnssec-monitor.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/cme-bind-dnssec/dnssec-monitor.sh
+ExecStart=/usr/local/sbin/cme-bind-dnssec/external-cds-monitor.sh
 KillSignal=1
 WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
 KillMode=control-group
