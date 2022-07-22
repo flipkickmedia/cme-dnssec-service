@@ -13,7 +13,7 @@ TTL=60
 log "handling CDS publish - running nsupdate for domain:${DOMAIN}"
 #run updates for all views
 readarray -td: views <<<"$VIEWS"
-for view in ${views[@]}; do
+for view in "${views[@]}"; do
   view_var="${view^^}"
   iface_var="${view_var//-/_}_IFACE"
   key_var="${view_var//-/_}_KEY_NAME"
@@ -23,10 +23,10 @@ for view in ${views[@]}; do
   ip_addr="${!iface_var}"
   key="${!key_name_var}"
 
-  if [[ -z $key ]]; then
-    echo "key NOT FOUND!..processing next view..."
-    continue
-  fi
+  # if [[ -z $key ]]; then
+  #   echo "key NOT FOUND!..processing next view..."
+  #   continue
+  # fi
 
   if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
     echo "view ................... : ${view}"
@@ -68,5 +68,5 @@ EOF
   log "notifying ${PARENT_DOMAIN} in ${view}"
   rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${PARENT_DOMAIN} in ${view}
   log "notifying ${DOMAIN} in ${view}"
-  rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
+  rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" notify "${DOMAIN}" in ${view}
 done
