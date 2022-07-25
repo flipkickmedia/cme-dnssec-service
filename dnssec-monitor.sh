@@ -5,13 +5,15 @@
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 export VIEWS=''
-if [[ ${CME_DNSSEC_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
+
+if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} -eq 0 ]]; then
   # shellcheck disable=SC1091
-  . "${DIR}/dnssec-monitor.env"
+  . "/etc/cme/dnssec-monitor.env"
 fi
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
-
+log "dir:${DIR}"
+log "logger flags:${LOGGER_FLAGS}"
 #readarray -td: views <<<"${VIEWS}"
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
@@ -59,7 +61,7 @@ if [[ $1 == '--monitor-external' ]]; then
 
   shopt -s extglob
   while (true); do
-    if [[ -n $retry && $retry -gt $(date %+s) ]]; then
+    if [[ -n $retry && $retry -gt $(date +%s) ]]; then
       sleep 5
       continue
     fi
@@ -106,38 +108,77 @@ if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
   echo "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
 fi
 
-view_config_check
+log "monitor running on $$ for CDS/KSK publish events"
 
+view_config_check
 trap "trap_exit" SIGINT 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --clean &
 monitor_pid=$!
-log "monitor running on $$ for CDS/KSK publish events"
+
+readarray -td: views <<<"${VIEWS}"
 
 # main monitoring/update
-files=$(find "${BIND_LOG_PATH}" -type f -not -name zone_transfers -not -name queries)
+files=$(find "${BIND_LOG_PATH}" -type f -not -name zone_transfers -not -name queries -printf '%p ')
+log "files:$files"
 (
-  tail -n0 -f "$files" | stdbuf -oL grep '.*' |
+  # shellcheck disable=SC2086
+  tail -n0 -f $files | stdbuf -oL grep '.*' |
     while IFS= read -r line; do
       # example
       # line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
       if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
+        log ""
+        key_found=0
         domain=$(awk '{print $6}' <<<"${line//\// }")
-        log "KSK Published! domain:${domain}"
-        if [[ ! -f ${domain}.dsprocess ]]; then
-          touch "${DSPROCESS_PATH}/${domain}.dsprocess"
-          "${DIR}/add.sh" "${domain}"
+        A="00000";
+        B="$(awk '{print $8}' <<<"${line//\// }")"
+        key_id="$(echo "${A:0:-${#B}}$B")"
+
+        log "KSK key_id:$key_id"
+
+        for view in ${views[@]}; do
+          key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
+          if [[ -f $key_file ]]; then
+            key_found=1          
+            log "KSK Published! domain:${domain} view:${view}"
+            if [[ ! -f ${domain}.dsprocess ]]; then
+              touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
+              "${DIR}/add.sh" "${domain}" "${key_id}" "${view}"
+            fi
+          fi
+        done
+        if [[ $key_found -eq 0 ]];then
+            log "KSK Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
         fi
       fi
-
       # example
       # line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
       if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
+        log ""
+        key_found=0
         domain=$(awk '{print $8}' <<<"${line//\// }")
-        log "CDS Published! domain:${domain}"
-        if [[ ! -f ${domain}.dsprocess ]]; then
-          touch "${DSPROCESS_PATH}/${domain}.dsprocess"
-          "${DIR}/update.sh" "${domain}"
+
+        A="00000";
+        B="$(awk '{print $10}' <<<"${line//\// }")"
+        log "CDS line:$line"
+        key_id="$(echo "${A:0:-${#B}}$B")"
+
+        log "CDS key_id:$key_id"        
+        #locate view using domain and key id
+        for view in ${views[@]}; do
+          key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
+          if [[ -f $key_file ]]; then
+            key_found=1
+            log "CDS Published! domain:${domain} view:${view}"
+            if [[ ! -f ${domain}.dsprocess ]]; then
+              touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
+              "${DIR}/update.sh" "${domain}" "${key_id}" "${view}"
+            fi
+          fi
+        done
+        if [[ $key_found -eq 0 ]];then
+            log "CDS Published but key was not found! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
         fi
       fi
     done

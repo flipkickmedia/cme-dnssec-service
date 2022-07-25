@@ -4,7 +4,7 @@
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 if [[ ${CME_DNSSEC_EXTERNAL_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
   # shellcheck disable=SC1091
-  . "${DIR}/dnssec-monitor.env"
+  . "/etc/cme/dnssec-monitor.env"
 fi
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
@@ -33,7 +33,7 @@ while (true); do
         if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
           echo "running: dig @${server} +short ${domain} CDS"
         fi
-        dig @"$server" +short "$domain" CDS | tee -a "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
+        dig "@{$server}" +short "${domain}" CDS | tee -a "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
         if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
           cat "${DSPROCESS_PATH}/external-cds-$domain-CDS"
           echo "running: tail -n0 \"${DSPROCESS_PATH}/external-cds-$domain-CDS\""

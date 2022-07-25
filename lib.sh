@@ -10,11 +10,13 @@ function parent_domain() {
 }
 
 function log() {
+  #25-Jul-2022 20:49:03.354
+  echo "$(date '+%d-%b-%Y %H:%M:%S.%3N') cme-dnssec-monitor: $@" >>/var/log/cme/dnssec-monitor
   /usr/bin/logger ${LOGGER_FLAGS} "$@"
 }
 
 function view_config_check() {
-  for view in ${views[@]}; do
+  for view in "${views[@]}"; do
     view_var="${view^^}"
     iface_var="${view_var//-/_}_IFACE"
     key_var="${view_var//-/_}_KEY_NAME"
@@ -30,25 +32,25 @@ function view_config_check() {
     key="${!key_name_var}"
 
     if [[ -z $key ]]; then
-      echo "key NOT FOUND!..processing next view..."
+      log "key NOT FOUND!..processing next view..."
       continue
     fi
 
     if [[ ! -f "${CONF_PATH}/rndc.${view}.conf" ]]; then
-      echo "${CONF_PATH}/rndc.${view}.conf not found! Exiting.."
+      log "${CONF_PATH}/rndc.${view}.conf not found! Exiting.."
       exit 1
     fi
 
     if [[ ! -f "${CONF_PATH}/rndc.${view}.key" ]]; then
-      echo "${CONF_PATH}/rndc.${view}.key not found! Exiting.."
+      log "${CONF_PATH}/rndc.${view}.key not found! Exiting.."
       exit 1
     fi
 
     if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-      echo "view ................... : $view"
-      echo "  ip_addr .............. : $ip_addr"
-      echo "  key_name ............. : $key_name"
-      echo "  key .................. : ******"
+      log "view ................... : $view"
+      log "  ip_addr .............. : $ip_addr"
+      log "  key_name ............. : $key_name"
+      log "  key .................. : ******"
     fi
   done
 }

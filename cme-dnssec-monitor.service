@@ -4,9 +4,9 @@ Before=named.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/cme-bind-dnssec/dnssec-monitor.sh
+ExecStart=/usr/local/sbin/cme-dnssec-monitor/dnssec-monitor.sh
 KillSignal=1
-WorkingDirectory=/usr/local/sbin/cme-bind-dnssec
+WorkingDirectory=/usr/local/sbin/cme-dnssec-monitor
 KillMode=control-group
 Restart=on-failure
 SyslogIdentifier=cme-dnssec-monitor

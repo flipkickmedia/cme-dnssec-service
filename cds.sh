@@ -52,4 +52,3 @@ for f in dsset-*; do
   dig @127.0.0.1 +dnssec +noall +answer $d DNSKEY $d CDNSKEY $d CDS |
   dnssec-cds -i -f /dev/stdin -d $f $d
 done
-
