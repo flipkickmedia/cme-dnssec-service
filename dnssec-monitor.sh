@@ -12,14 +12,12 @@ if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONI
 fi
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
-log "dir:${DIR}"
-log "logger flags:${LOGGER_FLAGS}"
-#readarray -td: views <<<"${VIEWS}"
 
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--clean' ]]; then
+  log "monitor running on $$ to clean dsprocess locks"
   function trap_exit() {
-    log "terminating dsprocess monitor"
+    log "terminating dsprocess monitor on PID:$$"
     exit 0
   }
 
@@ -42,10 +40,21 @@ if [[ $1 == '--clean' ]]; then
   done
 fi
 
+if [[ $1 == '--init' ]]; then
+  log "monitor running on $$ to initalise DS keys"
+  function trap_exit() {
+    log "terminating initalisation of DS keys"
+    exit 1
+  }
+  log "monitor terminating on PID:$$"
+  exit 0
+fi
+
 # stop repeated additions via nsupdate as views are handled in the same scope as the main process
 if [[ $1 == '--monitor-external' ]]; then
+  log "monitor running on $$ for external CDS/KSK publish events"
   function trap_exit() {
-    log "terminating external CDS check"
+    log "terminating external CDS check on PID:$$"
     exit 0
   }
 
@@ -96,31 +105,35 @@ function trap_exit() {
   exit 0
 }
 
-if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-  # print config
-  echo "NS_SERVER .............. : ${NS_SERVER}"
-  echo "DATA_PATH .............. : ${DATA_PATH}"
-  echo "DSPROCESS_PATH ......... : ${DSPROCESS_PATH}"
-  echo "CONF_PATH .............. : ${CONF_PATH}"
-  echo "BIND_LOG_PATH .......... : ${BIND_LOG_PATH}"
-  echo "KEY_PATH ............... : ${KEY_PATH}"
-  echo "CME_DNSSEC_MONITOR_DEBUG : ${CME_DNSSEC_MONITOR_DEBUG}"
-  echo "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
-fi
-
 log "monitor running on $$ for CDS/KSK publish events"
+files=$(find "${BIND_LOG_PATH}" -type f -not -name zone_transfers -not -name queries -printf '%p ')
+
+# if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+# print config
+log "WORKING_DIR ............ : ${DIR}"
+log "NS_SERVER .............. : ${NS_SERVER}"
+log "DATA_PATH .............. : ${DATA_PATH}"
+log "DSPROCESS_PATH ......... : ${DSPROCESS_PATH}"
+log "CONF_PATH .............. : ${CONF_PATH}"
+log "BIND_LOG_PATH .......... : ${BIND_LOG_PATH}"
+log "KEY_PATH ............... : ${KEY_PATH}"
+log "CME_DNSSEC_MONITOR_DEBUG : ${CME_DNSSEC_MONITOR_DEBUG}"
+log "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
+log "MONITORING BIND LOGS ... : $files"
+# fi
 
 view_config_check
-trap "trap_exit" SIGINT 15
+trap "trap_exit" SIGINT SIGHUP 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --clean &
+
+# run once and add all DS keys, regardless
+LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --init &
+
 monitor_pid=$!
 
 readarray -td: views <<<"${VIEWS}"
-
 # main monitoring/update
-files=$(find "${BIND_LOG_PATH}" -type f -not -name zone_transfers -not -name queries -printf '%p ')
-log "files:$files"
 (
   # shellcheck disable=SC2086
   tail -n0 -f $files | stdbuf -oL grep '.*' |
@@ -131,7 +144,7 @@ log "files:$files"
         log ""
         key_found=0
         domain=$(awk '{print $6}' <<<"${line//\// }")
-        A="00000";
+        A="00000"
         B="$(awk '{print $8}' <<<"${line//\// }")"
         key_id="$(echo "${A:0:-${#B}}$B")"
 
@@ -140,16 +153,16 @@ log "files:$files"
         for view in ${views[@]}; do
           key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
           if [[ -f $key_file ]]; then
-            key_found=1          
-            log "KSK Published! domain:${domain} view:${view}"
-            if [[ ! -f ${domain}.dsprocess ]]; then
+            key_found=1
+            log "KSK Published! domain:${domain} key_id:${key_id} view:${view}"
+            if [[ ! -f "${DSPROCESS_PATH}/${domain}.${view}.dsprocess" ]]; then
               touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
               "${DIR}/add.sh" "${domain}" "${key_id}" "${view}"
             fi
           fi
         done
-        if [[ $key_found -eq 0 ]];then
-            log "KSK Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
+        if [[ $key_found -eq 0 ]]; then
+          log "KSK Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
         fi
       fi
       # example
@@ -159,26 +172,26 @@ log "files:$files"
         key_found=0
         domain=$(awk '{print $8}' <<<"${line//\// }")
 
-        A="00000";
+        A="00000"
         B="$(awk '{print $10}' <<<"${line//\// }")"
         log "CDS line:$line"
         key_id="$(echo "${A:0:-${#B}}$B")"
 
-        log "CDS key_id:$key_id"        
+        log "CDS key_id:$key_id"
         #locate view using domain and key id
         for view in ${views[@]}; do
           key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
           if [[ -f $key_file ]]; then
             key_found=1
-            log "CDS Published! domain:${domain} view:${view}"
-            if [[ ! -f ${domain}.dsprocess ]]; then
+            log "CDS Published! domain:${domain} key: ${key_id} view:${view}"
+            if [[ ! -f "${DSPROCESS_PATH}/${domain}.${view}.dsprocess" ]]; then
               touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
-              "${DIR}/update.sh" "${domain}" "${key_id}" "${view}"
+              "${DIR}/update.sh" $domain $key_id $view
             fi
           fi
         done
-        if [[ $key_found -eq 0 ]];then
-            log "CDS Published but key was not found! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
+        if [[ $key_found -eq 0 ]]; then
+          log "CDS Published but key was not found! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
         fi
       fi
     done

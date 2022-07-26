@@ -3,15 +3,16 @@
 # updates a DS key on the parent domain based on the CDS key being published.
 # e.g. $ update.sh example.com
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-declare -xa VIEWS
 # shellcheck disable=1091
 . /etc/cme/dnssec-monitor.env
 # shellcheck disable=1091
 . "${DIR}/lib.sh"
-
+log "update DEBUG pre param set 1:$1 2:$2 3:$3"
+log "update DEBUG pre param set DOMAIN:$DOMAIN KEY_ID:$KEY_ID VIEW:$VIEW"
 DOMAIN=${DOMAIN:-$1}
 KEY_ID=${KEY_ID:-$2}
 VIEW=${VIEW:-$3}
+log "update DEBUG post param set DOMAIN:$DOMAIN KEY_ID:$KEY_ID VIEW:$VIEW"
 
 PARENT_DOMAIN=$(parent_domain "${DOMAIN}")
 TTL=60
@@ -19,7 +20,6 @@ TTL=60
 log "handling CDS publish - running nsupdate for domain:${DOMAIN} view:$view"
 
 # shellcheck disable=SC2068
-view="${VIEW}"
 view_var="${VIEW^^}"
 view_var="${view_var//-/_}"
 iface_var=${view_var}_IFACE

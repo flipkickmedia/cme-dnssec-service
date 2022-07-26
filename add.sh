@@ -3,19 +3,20 @@
 # adds a DS key to the parent domain when there are no CDS keys present.  If this is a clean run (i.e. no keys, service named start, make a cup of tea, then run this run this on each domain from the root down.)
 # e.g. $ add.sh example.com
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-declare -xa VIEWS
 # shellcheck disable=1091
 . /etc/cme/dnssec-monitor.env
 # shellcheck disable=1091
 . "${DIR}/lib.sh"
-
+log "update DEBUG pre param set 1:$1 2:$2 3:$3"
+log "update DEBUG pre param set DOMAIN:$DOMAIN KEY_ID:$KEY_ID VIEW:$VIEW"
 DOMAIN=${DOMAIN:-$1}
 KEY_ID=${KEY_ID:-$2}
 VIEW=${VIEW:-$3}
+log "update DEBUG post param set DOMAIN:$DOMAIN KEY_ID:$KEY_ID VIEW:$VIEW"
 
 PARENT_DOMAIN=$(parent_domain "${DOMAIN}")
 TTL=60
-view="${VIEW}"
+
 log "adding KSK for ${DOMAIN}"
 #find the id for the currently active KSK for the provided domain
 for f in "${KEY_PATH}/K${DOMAIN}.+014+"*.state; do
@@ -59,12 +60,16 @@ log "  key_var .............. : ${!key_var}"
 log "  key .................. : ******"
 
 #check to see if we have a CDS key published
-cds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$DOMAIN" CDS)
+ds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$DOMAIN" DS)
 if [[ $cds == "" ]]; then
-  ds=$(dnssec-dsfromkey -a SHA-384 "${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key" | awk '{print $4" "$5" "$6" "$7}')
-  log "DS:$ds"
-  if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-    log "$(cat <<EOF
+  log "no DS published for ${DOMAIN}/${VIEW}"
+fi
+
+ds=$(dnssec-dsfromkey -a SHA-384 "${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key" | awk '{print $4" "$5" "$6" "$7}')
+log "DS:$ds"
+# if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+log "$(
+  cat <<EOF
 nsupdate -k "${CONF_PATH}/rndc.${VIEW}.key"
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEW}
@@ -72,22 +77,21 @@ add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
 )"
-  fi
+# fi
 
-  nsupdate -l "${ip_addr}" -k "${CONF_PATH}/rndc.${VIEW}.key" < <(
-    cat <<EOF
+nsupdate -l "${ip_addr}" -k "${CONF_PATH}/rndc.${VIEW}.key" < <(
+  cat <<EOF
 server ${NS_SERVER}
 zone ${PARENT_DOMAIN}. in ${VIEW}
 add ${DOMAIN}. ${TTL} DS $ds
 send
 EOF
-  )
+)
 
-  log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${PARENT_DOMAIN} in ${VIEW}"
-  log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${DOMAIN} in ${VIEW}"
-  rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${PARENT_DOMAIN} in ${VIEW}
-  rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${DOMAIN} in ${VIEW}
-fi
+log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${PARENT_DOMAIN} in ${VIEW}"
+log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${DOMAIN} in ${VIEW}"
+rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${PARENT_DOMAIN} in ${VIEW}
+rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${DOMAIN} in ${VIEW}
 
 dig -b "${ip_addr}" "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "${DSPROCESS_PATH}/dsset-${VIEW}-${DOMAIN}." >/dev/null
 dig -b "${ip_addr}" "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "${DSPROCESS_PATH}/file-${VIEW}-${DOMAIN}" >/dev/null
