@@ -2,9 +2,7 @@
 # dnssec-monitor.sh
 # monitor named log output for CDS published string
 # run update.sh with domain
-
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-export VIEWS=''
 
 if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} -eq 0 ]]; then
   # shellcheck disable=SC1091
@@ -13,7 +11,10 @@ fi
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
 
-# stop repeated additions via nsupdate as views are handled in the same scope as the main process
+files="/var/log/named/ddns /var/log/named/default /var/log/named/named.run"
+readarray -td: views <<<"${VIEWS}"
+
+# clean ds process files which stop repeated additions via nsupdate for the same domain within a given time period
 if [[ $1 == '--clean' ]]; then
   log "monitor running on $$ to clean dsprocess locks"
   function trap_exit() {
@@ -46,6 +47,31 @@ if [[ $1 == '--init' ]]; then
     log "terminating initalisation of DS keys"
     exit 1
   }
+
+  # shellcheck disable=SC2068
+
+  for view in ${views[@]}; do
+    for file in /var/cache/bind/keys/${view}/*.state; do
+      key_path_prefix="/var/cache/bind/keys/${view}/K"
+      key="${file//$key_path_prefix/}"
+      key="${key//\.state/}"
+      readarray -td '.' domain_parts < <(printf "%s" "$key")
+      readarray -td '' array_reversed < <(
+        ((${#domain_parts[@]})) && printf '%s\0' "${domain_parts[@]}" | tac -s ''
+      )
+      unset 'array_reversed[0]'
+      log "domain_parts:${domain_parts[@]} array_reversed:${array_reversed[@]}"
+      
+    done
+  done
+
+  #iterate views
+  #iterate keys
+  #create domain env
+
+  # check key has no successor
+  #
+
   log "monitor terminating on PID:$$"
   exit 0
 fi
@@ -106,8 +132,6 @@ function trap_exit() {
 }
 
 log "monitor running on $$ for CDS/KSK publish events"
-files=$(find "${BIND_LOG_PATH}" -type f -not -name zone_transfers -not -name queries -printf '%p ')
-
 # if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
 # print config
 log "WORKING_DIR ............ : ${DIR}"
@@ -120,6 +144,7 @@ log "KEY_PATH ............... : ${KEY_PATH}"
 log "CME_DNSSEC_MONITOR_DEBUG : ${CME_DNSSEC_MONITOR_DEBUG}"
 log "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
 log "MONITORING BIND LOGS ... : $files"
+log "VIEWS .................. : ${views}"
 # fi
 
 view_config_check
@@ -132,7 +157,6 @@ LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --init &
 
 monitor_pid=$!
 
-readarray -td: views <<<"${VIEWS}"
 # main monitoring/update
 (
   # shellcheck disable=SC2086
@@ -146,10 +170,9 @@ readarray -td: views <<<"${VIEWS}"
         domain=$(awk '{print $6}' <<<"${line//\// }")
         A="00000"
         B="$(awk '{print $8}' <<<"${line//\// }")"
-        key_id="$(echo "${A:0:-${#B}}$B")"
-
-        log "KSK key_id:$key_id"
-
+        #key_id="$(echo "${A:0:-${#B}}$B")"
+        key_id="${A:0:-${#B}}$B"
+        # shellcheck disable=SC2068
         for view in ${views[@]}; do
           key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
           if [[ -f $key_file ]]; then
@@ -171,12 +194,10 @@ readarray -td: views <<<"${VIEWS}"
         log ""
         key_found=0
         domain=$(awk '{print $8}' <<<"${line//\// }")
-
         A="00000"
         B="$(awk '{print $10}' <<<"${line//\// }")"
-        log "CDS line:$line"
-        key_id="$(echo "${A:0:-${#B}}$B")"
-
+        #key_id="$(echo "${A:0:-${#B}}$B")"
+        key_id="${A:0:-${#B}}$B"
         log "CDS key_id:$key_id"
         #locate view using domain and key id
         for view in ${views[@]}; do

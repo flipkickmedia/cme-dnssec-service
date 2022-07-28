@@ -30,34 +30,35 @@ f=${f/\.state/\.key}
 log "handling KSK publish - running nsupdate ${DOMAIN}"
 
 # shellcheck disable=SC2068
-
 view_var="${VIEW^^}"
 view_var="${view_var//-/_}"
 iface_var=${view_var}_IFACE
 key_var=${view_var}_KEY_NAME
-
 log "key_var: $key_var"
 key_name="${!key_var}"
 key_name_var="${key_name^^}"
 key_name_var="${key_name_var//-/_}"
 ip_addr="${!iface_var}"
+key_file="${CONF_PATH}/rndc.${VIEW}.key"
 
 if [[ ! -f "${CONF_PATH}/rndc.${VIEW}.key" ]]; then
-  log "key file not found at ${CONF_PATH}/rndc.${VIEW}.key"
+  log "rndc key file not found at ${CONF_PATH}/rndc.${VIEW}.key"
   exit 0
 fi
 
 if [[ ! -f "${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key" ]]; then
-  log "key file ${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key NOT found!...processing next view..."
+  log "key file ${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key NOT found! Aborting."
   exit 0
 fi
 
 log "view ................... : ${VIEW}"
-log "  ip_addr .............. : ${ip_addr}"
-log "  key_name ............. : ${key_name}"
-log "  key_id ............... : ${KEY_ID}"
-log "  key_var .............. : ${!key_var}"
-log "  key .................. : ******"
+log "domain ................. : ${DOMAIN}"
+log "key_id ................. : ${KEY_ID}"
+log "key_var ................ : ${!key_var}"
+log "ip_addr ................ : ${ip_addr}"
+log "key_name ............... : ${key_name}"
+log "key_file ................: ${key_file}"
+log "TTL .................... : $TTL"
 
 #check to see if we have a CDS key published
 ds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$DOMAIN" DS)
