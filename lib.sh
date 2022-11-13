@@ -6,7 +6,8 @@ function parent_domain() {
   set -- "$@"
   parent="$*"
   parent=${parent//\ /\.}
-  echo $parent
+  echo -e $parent
+  return 0
 }
 
 function log() {
