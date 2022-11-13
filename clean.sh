@@ -5,8 +5,11 @@ if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONI
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
 fi
-# shellcheck disable=SC1091
-. "${DIR}/lib.sh"
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${DIR}/lib.sh"
+fi
 
 declare ip_addr=$1
 declare ns_server=$2
@@ -19,30 +22,31 @@ declare domain_conf="/etc/bind/rndc.${view}.conf"
 # shellcheck disable=SC2086,2155
 declare domain_parent="$(parent_domain $domain)"
 
-log "ip_addr           : ${ip_addr}"
-log "ns_server         : ${ns_server}"
-log "domain_parent     : ${domain_parent}"
-log "domain            : ${domain}"
-log "view              : ${view}"
-log "ttl               : ${ttl}"
-log "domain_key        : ${domain_key}"
-log "domain_conf       : ${domain_conf}"
+log "ip_addr             : ${ip_addr}"
+log "ns_server           : ${ns_server}"
+log "domain_parent       : ${domain_parent}"
+log "domain              : ${domain}"
+log "view                : ${view}"
+log "ttl                 : ${ttl}"
+log "domain_key          : ${domain_key}"
+log "domain_conf         : ${domain_conf}"
 
-log "flushing view     : ${view}"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
+log "flushing view       :  $(success_icon $?)"
 
-log "freezing          : ${view}"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" freeze "${domain_parent}" IN "${view}"
+log "freezing            : ${domain_parent} $(success_icon $?)"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" freeze "${domain}" IN "${view}"
+log "freezing            : ${domain} $(success_icon $?)"
 
-log "syncing           : all views"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean
+log "syncing (all views) :  $(success_icon $?)"
 
-log "thawing           : ${domain_parent}"
 rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain_parent}" IN "${view}"
+log "thawing             : ${domain_parent} in ${view} $(success_icon $?)"
 
-log "thawing           : ${domain}"
 rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain}" IN "${view}"
+log "thawing             : ${domain} in ${view} $(success_icon $?)"
 
 # get the records
 readarray -td$'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
@@ -57,7 +61,6 @@ log "${cds_records[*]}"
 log "ds_records"
 log "${ds_records[*]}"
 
-
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
 zone ${domain_parent}.
@@ -65,7 +68,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "...clean ${domain} DS parent records: result: $?"
+log "...clean ${domain} DS parent records $(success_icon $?)"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -74,7 +77,7 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "...clean ${domain} CDS parent records: result: $?"
+log "...clean ${domain} CDS parent records $(success_icon $?)"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -83,7 +86,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "...clean ${domain} DS records: result: $?"
+log "...clean ${domain} DS records $(success_icon $?)"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -92,7 +95,7 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "...clean ${domain} CDS records: result: $?"
+log "...clean ${domain} CDS records$(success_icon $?)"
 
 log "...syncing           : all views"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean
