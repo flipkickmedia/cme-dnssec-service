@@ -8,10 +8,13 @@ if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONI
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
 fi
+
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
 
 files="/var/log/named/ddns /var/log/named/default /var/log/named/named.run"
+empty_ds_regex='zone (.*)/IN/(.*) \('
+# shellcheck disable=SC2153
 readarray -td: views <<<"${VIEWS}"
 
 # clean ds process files which stop repeated additions via nsupdate for the same domain within a given time period
@@ -26,16 +29,18 @@ if [[ $1 == '--clean' ]]; then
 
   shopt -s extglob
   while (true); do
-    for dsprocess in "${DSPROCESS_PATH}/"*.dsprocess; do
-      if [ ! -f "$dsprocess" ]; then
-        sleep 5
-        continue
-      fi
-      if [[ $(date -r "$dsprocess" "+%s") -lt $(($(date +%s) - 60)) ]]; then
-        locked_domain=$(basename "$dsprocess")
-        log "removing dsprocess lock for ${locked_domain//\.dsprocess/}"
-        rm "$dsprocess"
-      fi
+    # shellcheck disable=SC2068
+    for view in ${views[@]}; do
+      for dsprocess in "${DSPROCESS_PATH}/${view}/"*.dsprocess; do
+        if [ ! -f "$dsprocess" ]; then
+          continue
+        fi
+        if [[ $(date -r "$dsprocess" "+%s") -lt $(($(date +%s) - 30)) ]]; then
+          locked_domain=$(basename "$dsprocess")
+          log "removing dsprocess lock for ${locked_domain//\.dsprocess/}/${view} ${dsprocess}"
+          rm "$dsprocess"
+        fi
+      done
     done
     sleep 5
   done
@@ -49,9 +54,8 @@ if [[ $1 == '--init' ]]; then
   }
 
   # shellcheck disable=SC2068
-
   for view in ${views[@]}; do
-    for file in /var/cache/bind/keys/${view}/*.state; do
+    for file in /var/cache/bind/keys/"${view}"/*.state; do
       key_path_prefix="/var/cache/bind/keys/${view}/K"
       key="${file//$key_path_prefix/}"
       key="${key//\.state/}"
@@ -60,19 +64,32 @@ if [[ $1 == '--init' ]]; then
         ((${#domain_parts[@]})) && printf '%s\0' "${domain_parts[@]}" | tac -s ''
       )
       unset 'array_reversed[0]'
-      log "domain_parts:${domain_parts[@]} array_reversed:${array_reversed[@]}"
-      
+      readarray -td '' domain_parts < <(
+        ((${#array_reversed[@]})) && printf '%s\0' "${array_reversed[@]}" | tac -s ''
+      )
+
+      ifsbak=$IFS
+      IFS=. domain=${domain_parts[*]}
+      IFS=$ifsbak
+
+      if [[ ! -f "${DSPROCESS_PATH}/${view}/${domain}.dsprocess" ]]; then
+        touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
+        log "domain: ${domain} view:${view}"
+        log "thawing domain: ${domain}"
+        rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" freeze "${domain}" in "${view}"
+        rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" sync -clean "${domain}" in "${view}"
+        rndc -k "${CONF_PATH}/rndc.${view}.key" -c "${CONF_PATH}/rndc.${view}.conf" thaw "${domain}" in "${view}"
+      fi
     done
   done
 
-  #iterate views
-  #iterate keys
-  #create domain env
-
+  # iterate views
+  # iterate keys
+  # create domain env
   # check key has no successor
   #
 
-  log "monitor terminating on PID:$$"
+  log "monitor (initialise keys) terminating on PID:$$"
   exit 0
 fi
 
@@ -143,11 +160,17 @@ log "BIND_LOG_PATH .......... : ${BIND_LOG_PATH}"
 log "KEY_PATH ............... : ${KEY_PATH}"
 log "CME_DNSSEC_MONITOR_DEBUG : ${CME_DNSSEC_MONITOR_DEBUG}"
 log "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
-log "MONITORING BIND LOGS ... : $files"
-log "VIEWS .................. : ${views}"
-# fi
+log "MONITORING BIND LOGS ... : ${files}"
+log "VIEWS .................. : ${views[*]}"
 
-view_config_check
+declare ip_addr
+declare ns_server
+declare domain
+declare ttl
+declare view
+declare record
+view_config_check "${views[@]}"
+
 trap "trap_exit" SIGINT SIGHUP 15
 
 LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --clean &
@@ -155,13 +178,53 @@ LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --clean &
 # run once and add all DS keys, regardless
 LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/dnssec-monitor.sh" --init &
 
-monitor_pid=$!
+declare -i monitor_pid=$!
+declare -i key_found=0
 
 # main monitoring/update
 (
   # shellcheck disable=SC2086
   tail -n0 -f $files | stdbuf -oL grep '.*' |
     while IFS= read -r line; do
+      # example
+      # Nov 11 17:25:06 ninja named[3260031]: 11-Nov-2022 17:25:06.474 general: notice: zone prod.node.flipkick.media/IN/internals-master (signed): checkds: empty DS response from 192.168.88.254#53
+      if grep -P '.*checkds: empty DS response.*' <<<"$line"; then
+        # capture view from message
+        if [[ $line =~ $empty_ds_regex ]]; then
+          domain=${BASH_REMATCH[1]}
+          view=${BASH_REMATCH[2]}
+
+          view_var="${view^^}"
+          iface_var="${view_var//-/_}_IFACE"
+          iface=${!iface_var}
+          ns_server_var="${view_var//-/_}_NS_SERVER"
+          ns_server=${!ns_server_var}
+          key_var="${view_var//-/_}_KEY_NAME"
+          key_name="${!key_var}"
+          key_name_var="${key_name^^}"
+          key_name_var="${key_name_var//-/_}"
+          iface_name=$(route | tail -n-1 | awk '{print $8}')
+          ip_addr="${!iface_var}"
+          key="${!key_name_var}"
+
+          log "view_var ....: ${view_var}"
+          log "view.........: ${view}"
+          log "key_var .....: ${key_var}"
+          log "key_name ....: ${key_name}"
+          log "key_name_var : ${key_name_var}"
+          log "key .........: ${key}"
+          log "iface_var ...: ${iface_var}"
+          log "iface_name...: ${iface_name}"
+          log "iface........: ${iface}"
+          log "ip_addr .....: ${ip_addr}"
+          log "ns_server....: ${ns_server}"
+          log "CONF_PATH....: ${CONF_PATH}"
+
+          log "handling empty DS response: domain:${domain} view:${view}"
+          "${DIR}/init" "${ip_addr}" "${ns_server}" "${domain}" 60 "${view}"
+        fi
+      fi
+
       # example
       # line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
       if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
@@ -175,16 +238,18 @@ monitor_pid=$!
         # shellcheck disable=SC2068
         for view in ${views[@]}; do
           key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
+          log "checking for key: ${key_file}"
           if [[ -f $key_file ]]; then
             key_found=1
             log "KSK Published! domain:${domain} key_id:${key_id} view:${view}"
-            if [[ ! -f "${DSPROCESS_PATH}/${domain}.${view}.dsprocess" ]]; then
-              touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
-              "${DIR}/add.sh" "${domain}" "${key_id}" "${view}"
+            if [[ ! -f "${DSPROCESS_PATH}/${view}/${domain}.dsprocess" ]]; then
+              touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
+              "${DIR}/add" ${domain} ${key_id} ${view}
+              break
             fi
           fi
         done
-        if [[ $key_found -eq 0 ]]; then
+        if [[ $key_found -gt 0 ]]; then
           log "KSK Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
         fi
       fi
@@ -199,15 +264,16 @@ monitor_pid=$!
         #key_id="$(echo "${A:0:-${#B}}$B")"
         key_id="${A:0:-${#B}}$B"
         log "CDS key_id:$key_id"
-        #locate view using domain and key id
-        for view in ${views[@]}; do
+
+        # locate view using domain and key id
+        for view; do
           key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
           if [[ -f $key_file ]]; then
             key_found=1
             log "CDS Published! domain:${domain} key: ${key_id} view:${view}"
-            if [[ ! -f "${DSPROCESS_PATH}/${domain}.${view}.dsprocess" ]]; then
-              touch "${DSPROCESS_PATH}/${domain}.${view}.dsprocess"
-              "${DIR}/update.sh" $domain $key_id $view
+            if [[ ! -f "${DSPROCESS_PATH}/${view}/${domain}.dsprocess" ]]; then
+              touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
+              "${DIR}/update" $domain $key_id $view
             fi
           fi
         done

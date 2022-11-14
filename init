@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} -eq 0 ]]; then
+  echo "...loading env"
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  echo "...loading lib"
+  . "${DIR}/lib.sh"
+fi
+
+declare ip_addr=$1
+declare ns_server=$2
+declare domain=$3
+declare ttl=$4
+declare view=$5
+declare record
+
+declare domain_key=/etc/bind/rndc.${view}.key
+declare domain_conf=/etc/bind/rndc.${view}.conf
+declare domain_parent
+
+domain_parent=$(parent_domain ${domain})
+
+log "ip_addr             : ${ip_addr}"
+log "ns_server           : ${ns_server}"
+log "domain_parent       : ${domain_parent}"
+log "domain              : ${domain}"
+log "view                : ${view}"
+log "ttl                 : ${ttl}"
+log "domain_key          : ${domain_key}"
+log "domain_conf         : ${domain_conf}"
+
+prepare_domain
+
+# @todo this is duplicate functionality in clean module l:70
+
+# nsupdate -k "${domain_key}" <<EOFT
+# server ${ns_server}
+# zone ${domain}.
+# update del ${domain}. DS
+# send
+# quit
+# EOFT
+# log "$(success_icon $?)...clean ${domain} DS records"
+
+# nsupdate -k "${domain_key}" <<EOFT
+# server ${ns_server}
+# zone ${domain}.
+# update del ${domain}. CDS
+# send
+# quit
+# EOFT
+# log "$(success_icon $?)...clean ${domain} CDS records"
+
+# rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
+# log "$(success_icon $?)...synced all records"
+
+# get the records
+readarray -td $'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
+readarray -td $'\n' cds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". CDS)
+readarray -td $'\n' ds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". DS)
+
+log ""
+log "ds_dnskey_records:"
+log "${ds_dnskey_records[*]}"
+log "cds_records:"
+log "${cds_records[*]}:"
+log "ds_records"
+log "${ds_records[*]}:"
+
+declare cds_key_id
+declare -a record_parts
+declare record
+declare key_id
+
+# if we have no CDS records, we need to add the DS records to the parent domain
+if [[ ${#cds_records} -ne ${#ds_records} ]]; then
+  log "diff in ds/cds records:"
+  for ds_record in "${ds_dnskey_records[@]}"; do
+    log "ds_record: ${ds_record}"
+  done
+  for ds_record in "${ds_dnskey_records[@]}"; do
+    record_parts=()
+    log "processing: ${ds_record}"
+    record="$(echo -e "${ds_record}" | awk '{print $4" "$5" "$6" "$7}')"
+    key_id="$(echo -e "${ds_record}" | awk '{print $4}')"
+
+    cds_key_id="$(echo -e "${cds_records[0]}" | awk '{print $1}')"
+    [[ "$key_id" != "$cds_key_id" ]] && continue
+
+    # @todo check to see if the state file for the key has been superceeded, if so remove the cds key in question
+
+    nsupdate -k ${domain_key} <<EOFT
+server ${ns_server}
+zone ${domain_parent}.
+update add ${domain}. ${ttl} CDS $record
+send
+quit
+EOFT
+    log "$(success_icon $?)...added CDS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
+
+    nsupdate -k ${domain_key} <<EOFT
+server ${ns_server}
+zone ${domain_parent}.
+update add ${domain}. ${ttl} DS $record
+send
+quit
+EOFT
+    log "$(success_icon $?)...added DS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
+
+    log "$(success_icon $?)...syncing"
+    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
+
+    log "$(success_icon $?)...flushing ${domain_parent}"
+    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
+
+    log "$(success_icon $?)...notifying ${domain}"
+    rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
+
+    log "$(success_icon $?)...notifying ${domain_parent}"
+    rndc -c ${domain_conf} -k ${domain_key} notify "${domain_parent}" IN "${view}"
+  done
+fi
+
+log "$(success_icon $?)...init completed."
