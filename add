@@ -62,12 +62,20 @@ log "TTL .................... : $TTL"
 
 #check to see if we have a CDS key published
 ds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$DOMAIN" DS)
-if [[ $cds == "" ]]; then
+if [[ $ds == "" ]]; then
   log "no DS published for ${DOMAIN}/${VIEW}"
+fi
+
+ds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$DOMAIN" CDS)
+if [[ $ds == "" ]]; then
+  log "no CDS published for ${DOMAIN}/${VIEW}"
 fi
 
 ds=$(dnssec-dsfromkey -a SHA-384 "${KEY_PATH}/${VIEW}/K${DOMAIN}.+014+${KEY_ID}.key" | awk '{print $4" "$5" "$6" "$7}')
 log "DS:$ds"
+
+rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" thaw ${PARENT_DOMAIN} in ${VIEW}
+
 # if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
 log "$(
   cat <<EOF
@@ -89,10 +97,13 @@ send
 EOF
 )
 
+rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" freeze ${PARENT_DOMAIN} in ${VIEW}
+rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" sync -clean ${PARENT_DOMAIN} in ${VIEW}
+
 log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${PARENT_DOMAIN} in ${VIEW}"
-log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${DOMAIN} in ${VIEW}"
 rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${PARENT_DOMAIN} in ${VIEW}
+log "rndc -k \"${CONF_PATH}/rndc.${VIEW}.key\" -c \"${CONF_PATH}/rndc.${VIEW}.conf\" notify ${DOMAIN} in ${VIEW}"
 rndc -k "${CONF_PATH}/rndc.${VIEW}.key" -c "${CONF_PATH}/rndc.${VIEW}.conf" notify ${DOMAIN} in ${VIEW}
 
-dig -b "${ip_addr}" "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "${DSPROCESS_PATH}/dsset-${VIEW}-${DOMAIN}." >/dev/null
-dig -b "${ip_addr}" "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "${DSPROCESS_PATH}/file-${VIEW}-${DOMAIN}" >/dev/null
+dig -b "${ip_addr}" "@${NS_SERVER}" +norecurse "${DOMAIN}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${DOMAIN}" | tee "${DSPROCESS_PATH}/${VIEW}/dsset-${DOMAIN}." >/dev/null
+dig -b "${ip_addr}" "@${NS_SERVER}" +dnssec +noall +answer "${DOMAIN}" DNSKEY "${DOMAIN}" CDNSKEY "${DOMAIN}" CDS | tee "${DSPROCESS_PATH}/${VIEW}/file-${DOMAIN}" >/dev/null
