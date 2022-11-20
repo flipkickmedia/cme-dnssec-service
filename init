@@ -1,8 +1,33 @@
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-if [[ ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} == "notloaded" || ${CME_DNSSEC_MONITOR_DEBUG:-notloaded} -eq 0 ]]; then
-  echo "...loading env"
+if [[ $# -lt 6 || $# -gt 6 ]]; then
+  echo -e
+  echo "cme-dnssec-monitor/init v0.1.0 - updates CDS/DS keys in a zone"
+  echo -e
+  echo "Usage:"
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+  
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+  declare -x KEY_PATH=/var/cache/bind/keys
+  declare -x DSPROCESS_PATH=/tmp/cme/dsprocess
+"
+  echo -e
+
+  echo "  examples:"
+  echo "  $ update \$domain \$view \$ip_addr \$ns_server \$ttl \$key_id"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ update 127.0.0.1 192.168.88.2 test.com \"\" externals-master"
+  exit 1
+fi
+echo "init: $@"
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
 fi
@@ -13,52 +38,44 @@ if [[ -f "${DIR}/lib.sh" ]]; then
   . "${DIR}/lib.sh"
 fi
 
-declare ip_addr=$1
-declare ns_server=$2
-declare domain=$3
-declare ttl=$4
-declare view=$5
-declare record
-
+declare domain=${DOMAIN:-$1}
+declare view=${VIEW:-$2}
+declare ip_addr=${IP_ADDR:-$3}
+declare ns_server=${NS_SERVER:-$4}
+declare ttl=${TTL:-$5}
+declare key_id=${KEY_ID:-$6}
+declare key_path=${KEY_PATH:-${DATA_PATH}/keys}
+declare dsprocess_path=${DSPROCESS_PATH:-/tmp/cme/dsprocess}
 declare domain_key=/etc/bind/rndc.${view}.key
 declare domain_conf=/etc/bind/rndc.${view}.conf
 declare domain_parent
+declare record
+declare depth
+
 
 domain_parent=$(parent_domain ${domain})
 
-log "ip_addr             : ${ip_addr}"
-log "ns_server           : ${ns_server}"
-log "domain_parent       : ${domain_parent}"
 log "domain              : ${domain}"
 log "view                : ${view}"
+log "ip_addr             : ${ip_addr}"
+log "ns_server           : ${ns_server}"
 log "ttl                 : ${ttl}"
+log "key_id              : ${key_id}"
+log "domain_parent       : ${domain_parent}"
 log "domain_key          : ${domain_key}"
 log "domain_conf         : ${domain_conf}"
+log "dsprocess_path      : ${dsprocess_path}"
 
 prepare_domain
 
-# @todo this is duplicate functionality in clean module l:70
+if [[ ! -d "${dsprocess_path}/${view}" ]]; then
+  mkdir "${dsprocess_path}/${view}"
+fi
+chown root:root "${dsprocess_path}/${view}"
+chmod 770
 
-# nsupdate -k "${domain_key}" <<EOFT
-# server ${ns_server}
-# zone ${domain}.
-# update del ${domain}. DS
-# send
-# quit
-# EOFT
-# log "$(success_icon $?)...clean ${domain} DS records"
-
-# nsupdate -k "${domain_key}" <<EOFT
-# server ${ns_server}
-# zone ${domain}.
-# update del ${domain}. CDS
-# send
-# quit
-# EOFT
-# log "$(success_icon $?)...clean ${domain} CDS records"
-
-# rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
-# log "$(success_icon $?)...synced all records"
+log "$(success_icon $?)...flushing ${domain_parent}"
+rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
 
 # get the records
 readarray -td $'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
@@ -91,12 +108,22 @@ if [[ ${#cds_records} -ne ${#ds_records} ]]; then
     key_id="$(echo -e "${ds_record}" | awk '{print $4}')"
 
     cds_key_id="$(echo -e "${cds_records[0]}" | awk '{print $1}')"
+
+    if grep -q "KSK: ${domain_conf}" "$f"; then
+      if ! grep -q "Successor:" "$f"; then
+        id=$(echo "$f" | grep -Po '\d+' | tail -n 1)
+        log "found KSK key: $f"
+        found_key=true
+      fi
+    fi
+
     [[ "$key_id" != "$cds_key_id" ]] && continue
 
     # @todo check to see if the state file for the key has been superceeded, if so remove the cds key in question
 
     nsupdate -k ${domain_key} <<EOFT
 server ${ns_server}
+local ${ip_address}
 zone ${domain_parent}.
 update add ${domain}. ${ttl} CDS $record
 send
@@ -105,6 +132,7 @@ EOFT
     log "$(success_icon $?)...added CDS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
 
     nsupdate -k ${domain_key} <<EOFT
+local ${ip_address}
 server ${ns_server}
 zone ${domain_parent}.
 update add ${domain}. ${ttl} DS $record
@@ -113,11 +141,11 @@ quit
 EOFT
     log "$(success_icon $?)...added DS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
 
-    log "$(success_icon $?)...syncing"
-    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
-
     log "$(success_icon $?)...flushing ${domain_parent}"
     rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
+
+    log "$(success_icon $?)...syncing"
+    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
 
     log "$(success_icon $?)...notifying ${domain}"
     rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
@@ -127,4 +155,11 @@ EOFT
   done
 fi
 
+# create dsset files for updating the CDS keys
+
+dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
+
 log "$(success_icon $?)...init completed."
+
+exit 0
