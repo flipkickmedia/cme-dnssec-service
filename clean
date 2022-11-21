@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# cme-dnssec-monitor/clean v0.1.0
+# removes DS keys from bind
+
+if [[ $# -gt 6 || $# -lt 5 ]]; then
+  echo -e
+  echo "cme-dnssec-monitor/clean v0.1.0 - updates CDS/DS keys in a zone"
+  echo "$@"
+  echo -e
+  echo "Usage:"
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+"
+  echo -e
+
+  echo "  examples:"
+  echo "  $ update \$ip_addr} \$ns_server} \$domain} \$ttl} \$view}"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ update 127.0.0.1 192.168.88.2 test.com \"\" externals-master"
+  exit 1
+fi
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${DIR}/lib.sh"
+fi
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
+declare domain_parent
+declare depth
+declare found_key=false
+declare ksk_file
+
+config_init
+prepare_domain
+
+nsupdate -k "${domain_key}" <<EOFT
+server ${ns_server}
+zone ${domain_parent}.
+update del ${domain}. DS
+send
+quit
+EOFT
+log "$(success_icon $?)...clean .......: ${domain} DS parent records"
+
+nsupdate -k "${domain_key}" <<EOFT
+server ${ns_server}
+zone ${domain_parent}.
+update del ${domain}. CDS
+send
+quit
+EOFT
+log "$(success_icon $?)...clean .......: ${domain} CDS parent records"
+
+nsupdate -k "${domain_key}" <<EOFT
+server ${ns_server}
+zone ${domain}.
+update del ${domain}. DS
+send
+quit
+EOFT
+log "$(success_icon $?)...clean .......: ${domain} DS records"
+
+nsupdate -k "${domain_key}" <<EOFT
+server ${ns_server}
+zone ${domain}.
+update del ${domain}. CDS
+send
+quit
+EOFT
+log "$(success_icon $?)...clean .......: ${domain} CDS records"
+
+rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}"
+rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain_parent}" IN "${view}"
+log "$(success_icon $?)...syncing .....: all views"
+
+rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
+log "$(success_icon $?)...flushing.....: ${view}"
+
+rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain_parent}" IN "${view}"
+rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain}" IN "${view}"
+log "$(success_icon $?)...notifying ...: ${view}"
+
+# get the records
+readarray -td$'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
+readarray -td$'\n' cds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". CDS)
+readarray -td$'\n' ds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". DS)
+
+# log "ds_dnskey_records:"
+# log "${ds_dnskey_records[*]}"
+# log "cds_records:"
+# log "${cds_records[*]}"
+# log "ds_records:"
+# log "${ds_records[*]}"

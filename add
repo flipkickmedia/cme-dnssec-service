@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# add
+# adds a DS key to the parent domain when there are no CDS keys present.  If this is a clean run (i.e. no keys, service named start, make a cup of tea, then run this run this on each domain from the root down.)
+# e.g. $ add.sh example.com
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ $# -lt 6 || $# -gt 6 ]]; then
+  echo -e
+  echo "cme-dnssec-monitor/add v0.1.0 - adds a new DS key to the zone"
+  echo "$@"
+  echo -e
+  echo "Usage:"
+  echo -e
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+  declare -x KEY_PATH=/var/cache/bind/keys
+  declare -x DSPROCESS_PATH=/tmp/cme/dsprocess
+"
+  echo -e
+  echo "  examples:"
+  echo "  $ add \$domain \$view \$ip_addr \$ns_server \$ttl \$key_id"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ add test.example.com externals-master 10.0.254.2 192.168.88.2 "" 01234"
+  exit 1
+fi
+
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  echo "...loading /etc/cme/dnssec-monitor.env"
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${DIR}/lib.sh"
+fi
+
+echo "add: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
+declare domain_parent
+declare depth
+declare found_key=false
+declare ksk_file
+
+config_init
+prepare_domain
+
+if [[ $found_key == "true" ]]; then
+  log "handling KSK publish for: ${domain}"
+else
+  log "could not locate KSK state: ${key_id} in ${view}"
+  exit 1
+fi
+
+if [[ ! -f "${domain_key}" ]]; then
+  log "rndc key file not found: ${domain_key}"
+  exit 1
+fi
+
+if [[ ! -f "${ksk_file}.key" ]]; then
+  log "KSK key  NOT found! Aborting: ${ksk_file}.key"
+  exit 1
+fi
+
+#check to see if we have a CDS key published
+ds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" DS)
+if [[ $ds == "" ]]; then
+  log "no DS published for ${domain}/${view}"
+fi
+
+cds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" CDS)
+if [[ $cds == "" ]]; then
+  log "no CDS published for ${domain}/${view}"
+fi
+
+ds=$(dnssec-dsfromkey -a SHA-384 "${key_path}/${view}/K${domain}.+014+${key_id}.key" | awk '{print $4" "$5" "$6" "$7}')
+log "DS:$ds"
+
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
+
+# if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+log "$(
+  cat <<EOF
+nsupdate -k "${domain_key}"
+server ${ns_server}
+zone ${domain_parent}. in ${view}
+add ${domain}. ${TTL} DS $ds
+send
+EOF
+)"
+# fi
+
+nsupdate -l "${ip_addr}" -k "${domain_key}" < <(
+  cat <<EOF
+server ${ns_server}
+zone ${domain_parent}. in ${view}
+add ${domain}. ${TTL} DS $ds
+send
+EOF
+)
+
+refresh_domain
+notify_domain
+
+dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
+
+exit 0

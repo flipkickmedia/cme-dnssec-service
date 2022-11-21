@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ $# -lt 6 || $# -gt 6 ]]; then
+  echo -e
+  echo "cme-dnssec-monitor/init v0.1.0 - updates CDS/DS keys in a zone"
+  echo -e
+  echo "Usage:"
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+  
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+  declare -x KEY_PATH=/var/cache/bind/keys
+  declare -x DSPROCESS_PATH=/tmp/cme/dsprocess
+"
+  echo -e
+
+  echo "  examples:"
+  echo "  $ update \$domain \$view \$ip_addr \$ns_server \$ttl \$key_id"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ update 127.0.0.1 192.168.88.2 test.com \"\" externals-master"
+  exit 1
+fi
+
+
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${DIR}/lib.sh"
+fi
+
+log "init: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
+declare domain_parent
+declare depth
+declare found_key=false
+declare ksk_file
+
+declare record
+config_init
+prepare_domain
+
+log "$(success_icon $?)...flushing ${domain_parent}"
+rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
+
+# get the records
+readarray -td $'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
+readarray -td $'\n' cds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". CDS)
+readarray -td $'\n' ds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". DS)
+
+# log ""
+# log "ds_dnskey_records:"
+# log "${ds_dnskey_records[*]}"
+# log "cds_records:"
+# log "${cds_records[*]}:"
+# log "ds_records"
+# log "${ds_records[*]}:"
+
+declare cds_key_id
+declare -a record_parts
+declare record
+declare key_id
+
+# if we have no CDS records, we need to add the DS records to the parent domain
+if [[ ${#cds_records} -ne ${#ds_records} ]]; then
+  # log "diff in ds/cds records:"
+  # for ds_record in "${ds_dnskey_records[@]}"; do
+  #   log "ds_record: ${ds_record}"
+  # done
+  for ds_record in "${ds_dnskey_records[@]}"; do
+    record_parts=()
+    # log "processing: ${ds_record}"
+    record="$(echo -e "${ds_record}" | awk '{print $4" "$5" "$6" "$7}')"
+    key_id="$(echo -e "${ds_record}" | awk '{print $4}')"
+    cds_key_id="$(echo -e "${cds_records[0]}" | awk '{print $1}')"
+
+    # echo domain:$domain view:$view key_id:$key_id key:$KEY_PATH/${view}/K$domain.+014+$key_id.state
+    declare key_state_file="$KEY_PATH/${view}/K$domain.+014+$key_id.state"
+    # check the kwy provided matches a
+    if grep -q "KSK: ${domain_conf}" "$key_state_file"; then
+      if ! grep -q "Successor:" "$key_state_file"; then
+        log "found KSK key: $key_state_file"
+        found_key=true
+      fi
+    fi
+
+    [[ "$key_id" != "$cds_key_id" ]] && continue
+
+    # @todo check to see if the state file for the key has been superceeded, if so remove the cds key in question
+
+    nsupdate -k ${domain_key} <<EOFT
+server ${ns_server}
+local ${ip_addr}
+zone ${domain_parent}.
+update add ${domain}. ${ttl} CDS $record
+send
+quit
+EOFT
+    log "$(success_icon $?)...added CDS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
+
+    nsupdate -k ${domain_key} <<EOFT
+local ${ip_addr}
+server ${ns_server}
+zone ${domain_parent}.
+update add ${domain}. ${ttl} DS $record
+send
+quit
+EOFT
+    log "$(success_icon $?)...added DS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
+
+    log "$(success_icon $?)...flushing ...: ${domain_parent}"
+    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
+
+    log "$(success_icon $?)...syncing ....: all "
+    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
+
+    log "$(success_icon $?)...notifying ..: ${domain}"
+    rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
+
+    log "$(success_icon $?)...notifying ..: ${domain_parent}"
+    rndc -c ${domain_conf} -k ${domain_key} notify "${domain_parent}" IN "${view}"
+  done
+fi
+
+# create dsset files for updating the CDS keys
+
+dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
+
+log "$(success_icon $?)...init completed."
+
+exit 0
