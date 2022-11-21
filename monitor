@@ -3,16 +3,14 @@
 # monitor named log output for CDS published string
 # run update.sh with domain
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-
+declare -x LOG_PREFIX="init"
 if [[ -f "${DIR}/lib.sh" ]]; then
   # shellcheck disable=SC1091
-  echo "...loading lib ${DIR}/lib.sh"
   . "${DIR}/lib.sh"
 fi
 
 # shellcheck disable=SC2153
 if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
-  echo "...loading /etc/cme/dnssec-monitor.env"
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
 fi
@@ -67,10 +65,11 @@ if [[ $1 == '--clean' ]]; then
   log "dsprocess locks ($count_dsprocess_locks) removed"
 fi
 
-if [[ $1 == '--init' ]]; then
+if [[ $1 == '--setup-check' ]]; then
+  LOG_PREFIX="setup"
   log ""
   log ""
-  log "monitor (initalise keys) running on $$"
+  log "monitor (setup check keys) running on $$"
 
   echo $$ >/tmp/cme/init.pid
 
@@ -104,8 +103,8 @@ if [[ $1 == '--init' ]]; then
   declare domain_conf
   declare domain_parent
   declare record
-  declare depth
-  declare parent_depth
+  declare -i depth
+  declare -i parent_depth
   declare iface
   declare iface_name
   declare key_name
@@ -114,11 +113,10 @@ if [[ $1 == '--init' ]]; then
 
   # shellcheck disable=SC2068
   for view in "${views[@]}"; do
-    for file in /var/cache/bind/keys/"${view}"/*.state; do
+    for file in /var/cache/bind/keys/${view}/*.state; do
       key_path_prefix="${KEY_PATH}/${view}/K"
       key="${file//$key_path_prefix/}"
       key="${key//\.state/}"
-
       if grep -q "KSK: yes" "$file"; then
         if ! grep -q "Successor:" "$file"; then
           # key example: dev.node.flipkick.media.+014+19137
@@ -134,6 +132,7 @@ if [[ $1 == '--init' ]]; then
       else
         continue
       fi
+
       config_init
 
       log ""
@@ -151,11 +150,12 @@ if [[ $1 == '--init' ]]; then
       if [[ $depth -gt 1 ]]; then
         "${DIR}/clean" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
         resclean=$?
-        log "result from clean was $?"
+        log "$(success_icon $?) result from clean was $?"
         "${DIR}/init" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-        log "result from init was $?"
+        log "$(success_icon $?) result from init was $?"
         resinit=$?
-        refresh_domain
+        refresh_domain $domain
+
       else
         log "skipping domain as it is next to a TLD"
       fi
@@ -168,7 +168,7 @@ if [[ $1 == '--init' ]]; then
       fi
     done
   done
-  log "monitor (initialise keys) terminating on PID:$$"
+  log "monitor (setup) terminating on PID:$$"
   rm /tmp/cme/init.pid
   exit 0
 fi
@@ -179,13 +179,11 @@ if [[ $1 == '--monitor-external' ]]; then
 
   if [[ -f "${DIR}/lib.sh" ]]; then
     # shellcheck disable=SC1091
-    echo "...loading lib ${DIR}/lib.sh"
     . "${DIR}/lib.sh"
   fi
 
   # shellcheck disable=SC2153
   if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
-    echo "...loading /etc/cme/dnssec-monitor.env"
     # shellcheck disable=SC1091
     . "/etc/cme/dnssec-monitor.env"
   fi
@@ -230,20 +228,9 @@ if [[ $1 == '--monitor-external' ]]; then
   done
 fi
 
-function trap_exit() {
-  if [[ -n $monitor_pid && -n $(ps -p "$monitor_pid") ]]; then
-    log "monitor terminating on PID:$monitor_pid"
-    kill -1 "$monitor_pid" 2>/dev/null
-    wait "$monitor_pid"
-  fi
-  if [[ -n $tail_pid && -n $(ps -p "$tail_pid") ]]; then
-    kill -1 "$tail_pid" 2>/dev/null
-    wait "$tail_pid"
-  fi
-  exit 0
-}
-
+# main service starts here
 if [[ $# -eq 0 ]]; then
+  LOG_PREFIX="monitor"
   log "monitor running on $$ for CDS/KSK publish events"
   # if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
   # print config
@@ -256,12 +243,12 @@ if [[ $# -eq 0 ]]; then
   log "CME_DNSSEC_MONITOR_DEBUG : ${CME_DNSSEC_MONITOR_DEBUG}"
   log "LOGGER_FLAGS ........... : ${LOGGER_FLAGS}"
   log "MONITORING BIND LOGS ... : ${files}"
-  log "VIEWS .................. : ${views[*]}"
+  log "VIEWS .................. : ${VIEWS[*]}"
 
   trap "trap_exit" SIGINT SIGHUP 15
 
   if [[ -z $SKIP_INIT || $SKIP_INIT -eq 0 ]]; then
-    LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --init &
+    LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --setup-check &
   fi
 
   LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --clean &
@@ -270,7 +257,7 @@ if [[ $# -eq 0 ]]; then
   #LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --init &
 
   declare -i monitor_pid=$!
-  declare key_found=false
+  declare found_key=false
 
   # main monitoring/update
   (
@@ -321,9 +308,12 @@ if [[ $# -eq 0 ]]; then
         if grep -P '.*checkds: empty DS response.*' <<<"$line"; then
           found_key=false
           # @todo check to make sure we init a new key on domains we have control of.
-          log "trigger line: $line"
           # capture view from message
           if [[ $line =~ $empty_ds_regex ]]; then
+            log ""
+            log ""
+            log ""
+            log "handling empty DS response"
             domain=${BASH_REMATCH[1]}
             view=${BASH_REMATCH[2]}
             config_init
@@ -351,9 +341,9 @@ if [[ $# -eq 0 ]]; then
               # log "ns_server....: ${ns_server}"
               # log "CONF_PATH....: ${CONF_PATH}"
               "${DIR}/clean" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-              log "result from clean was $?"
+              log "$(success_icon $?) result from clean was $?"
               "${DIR}/init" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-              log "result from init was $?"
+              log "$(success_icon $?) result from init was $?"
             fi
           fi
         fi
@@ -364,8 +354,13 @@ if [[ $# -eq 0 ]]; then
           found_key=false
           domain=$(awk '{print $6}' <<<"${line//\// }")
           key_id="$(awk '{print $8}' <<<"${line//\// }")"
+
+          log A
+          key_path=${KEY_PATH:-/var/cache/bind/keys}
           find_view_from_ksk_id
+          log B
           config_init
+          log C
 
           if [[ $found_key == "true" ]]; then
             log ""
@@ -375,7 +370,7 @@ if [[ $# -eq 0 ]]; then
             if [[ -f "${DIR}/add" ]]; then
               log "running: ${DIR}/add"
               "${DIR}/add" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-              log "result from add was $?"
+              log "$(success_icon $?) result from add was $?"
             else
               log "can't find cmd: ${DIR}/add"
             fi
@@ -386,13 +381,14 @@ if [[ $# -eq 0 ]]; then
         # example
         # line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
         if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
-          key_found=false
+          found_key=false
           log ""
           log ""
           log ""
           domain="$(awk '{print $8}' <<<"${line//\// }")"
           key_id="$(awk '{print $10}' <<<"${line//\// }")"
 
+          key_path=${KEY_PATH:-/var/cache/bind/keys}
           find_view_from_ksk_id
           config_init
 
@@ -400,7 +396,7 @@ if [[ $# -eq 0 ]]; then
             log "handling CDS publish"
             log "running: ${DIR}/update"
             "${DIR}/update" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-            log "result from update was $?"
+            log "$(success_icon $?) result from update was $?"
           else
             log "CDS Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
           fi
@@ -410,4 +406,5 @@ if [[ $# -eq 0 ]]; then
   tail_pid=$!
   wait $tail_pid
 fi
+
 exit 0

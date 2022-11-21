@@ -40,7 +40,6 @@ fi
 
 if [[ -f "${DIR}/lib.sh" ]]; then
   # shellcheck disable=SC1091
-  echo "...loading lib"
   . "${DIR}/lib.sh"
 fi
 
@@ -61,11 +60,13 @@ declare domain_parent
 declare depth
 declare found_key=false
 declare ksk_file
+declare nsupdate_out
+declare rndc_out
 
 config_init
 
-log "removing old nsup"
 rm "${dsprocess_path}/${view}/nsup.${domain}"
+log "$(success_icon $?) removed old nsup from ${domain}"
 
 nsup_file=${dsprocess_path}/${view}/nsup.${domain}
 dsset_file=${dsprocess_path}/${view}/dsset-${view}-${domain}
@@ -77,40 +78,34 @@ touch "${dsprocess_path}/${view}/nsup.${domain}"
 
 mkdir -p "${dsprocess_path}/${view}"
 if [[ ! -f "${dsprocess_path}/${view}/dsset-${domain}." ]]; then
-  log "creating dnsec-cds DS dsset file"
   dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+  log "$(success_icon $?) created dnsec-cds DS dsset file"
 fi
-log "creating dnsec-cds CDS file"
+
 dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
+log "$(success_icon) created dnsec-cds CDS file"
 
-log "creating dnsec-cds nsup"
-log "$(dnssec-cds -a SHA-384 -s-86400 -T "${ttl}" -u -i -f "${dsprocess_path}/${view}/file-${domain}" -d "${dsprocess_path}/${view}" -i"orig" "${domain}" | tee "${dsprocess_path}/${view}/nsup.${domain}" >/dev/null)"
+dnssec-cds -a SHA-384 -s-86400 -T "${ttl}" -u -i -f "${dsprocess_path}/${view}/file-${domain}" -d "${dsprocess_path}/${view}" -i"orig" "${domain}" | tee "${dsprocess_path}/${view}/nsup.${domain}" >/dev/null
+log "$(success_icon) created dnsec-cds nsup"
 
-log "content dnsec-cds CDS file"
-echo ${dsprocess_path}/${view}/file-${domain}
-cat ${dsprocess_path}/${view}/file-${domain}
-
-log "content dnsec-cds nsup file"
-echo ${dsprocess_path}/${view}/nsup.${domain}
-cat ${dsprocess_path}/${view}/nsup.${domain}
-
-log "thawing ${domain_parent} in ${view}"
 rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
+log "$(success_icon) thawed ${domain_parent} in ${view} $rndc_out"
 
-log "$(
-  cat <<EOF
-nsupdate -k "${domain_key}" <<EOFT
-local ${ip_addr}
-server ${ns_server}
-zone ${domain_parent}.
-$(cat ${nsup_file})
-send
-quit
-)
-EOF
-)"
+# log "$(
+#   cat <<EOF
+# nsupdate -k "${domain_key}" <<EOFT
+# local ${ip_addr}
+# server ${ns_server}
+# zone ${domain_parent}.
+# $(cat ${nsup_file})
+# send
+# quit
+# )
+# EOF
+# )"
 
-nsupdate -k "${domain_key}" <<EOFT
+nsupdate_out=$(
+  nsupdate -k "${domain_key}" <<EOFT
 local ${ip_addr}
 server ${ns_server}
 zone ${domain_parent}.
@@ -118,24 +113,13 @@ $(cat ${dsprocess_path}/${view}/nsup.${domain})
 send
 quit
 EOFT
+  2>&1
+)
+log "$(success_icon $?) applied ns changes from nsup ${nsupdate_out}"
 
-log "freezing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain_parent} in ${view}
-log "syncing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain_parent} in ${view}
-log "thawing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
-
-log "freezing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain} in ${view}
-log "syncing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain} in ${view}
-log "thawing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain} in ${view}
-
-log "notifying ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain_parent} in ${view}
-log "notifying ${DOMAIN} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain} in ${view}
+refresh_domain $domain_parent
+notify_domain $domain_parent
+refresh_domain $domain
+notify_domain $domain
 
 exit 0

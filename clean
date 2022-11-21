@@ -55,7 +55,8 @@ declare found_key=false
 declare ksk_file
 
 config_init
-prepare_domain
+prepare_domain $domain
+prepare_domain $domain_parent
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -64,7 +65,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean .......: ${domain} DS parent records"
+log "$(success_icon $?) clean .......: ${domain} DS parent records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -73,7 +74,7 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean .......: ${domain} CDS parent records"
+log "$(success_icon $?) clean .......: ${domain} CDS parent records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -82,7 +83,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean .......: ${domain} DS records"
+log "$(success_icon $?) clean .......: ${domain} DS records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -91,18 +92,12 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean .......: ${domain} CDS records"
+log "$(success_icon $?) clean .......: ${domain} CDS records"
 
-rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}"
-rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain_parent}" IN "${view}"
-log "$(success_icon $?)...syncing .....: all views"
-
-rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
-log "$(success_icon $?)...flushing.....: ${view}"
-
-rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain_parent}" IN "${view}"
-rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain}" IN "${view}"
-log "$(success_icon $?)...notifying ...: ${view}"
+refresh_domain $domain_parent
+notify_domain $domain_parent
+refresh_domain $domain
+notify_domain $domain
 
 # get the records
 readarray -td$'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")

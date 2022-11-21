@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 #set +e #otherwise the script will exit on error
-
-echo loading lib...
-
 rndc_cmd=$(which rndc)
 nsupdate_cmd=$(which rndc)
+
+function trap_exit() {
+  if [[ -n $monitor_pid && -n $(ps -p "$monitor_pid") ]]; then
+    log "monitor terminating on PID:$monitor_pid"
+    kill -1 "$monitor_pid" 2>/dev/null
+    wait "$monitor_pid"
+  fi
+  if [[ -n $tail_pid && -n $(ps -p "$tail_pid") ]]; then
+    kill -1 "$tail_pid" 2>/dev/null
+    wait "$tail_pid"
+  fi
+  exit 0
+}
 
 function join_by {
   local d=${1-} f=${2-}
@@ -25,9 +35,11 @@ function parent_domain() {
 }
 
 function log() {
-  echo "$(date '+%d-%b-%Y %H:%M:%S.%3N') cme-dnssec-monitor:${BASH_SOURCE[1]//$DIR\//} " "$@" >>${LOG_FILE:-"/var/log/cme/dnssec-monitor.log"} 2>&1
-  # shellcheck disable=2086
-  /usr/bin/logger ${LOGGER_FLAGS} "${BASH_SOURCE[1]//$DIR\//} $@"
+  local padding="                                           "
+  local src=${BASH_SOURCE[1]//$DIR\//}
+  local out="$@"
+  src=$(printf '%s' "${LOG_PREFIX}:${src}")
+  /usr/bin/logger -s $LOGGER_FLAGS "$(printf "%s%s %s\n" "$src" "${padding:${#src}}" "$out")" 2>>${LOG_FILE:-"/var/log/cme/dnssec-monitor.log"}
 }
 
 function success_icon() {
@@ -35,19 +47,6 @@ function success_icon() {
   [[ $1 -ne 0 ]] && echo -e "❌" && return "$1"
 }
 
-function render_params() {
-  log "domain              : ${domain}"
-  log "domain_parent       : ${domain_parent}"
-  log "view                : ${view}"
-  log "ip_addr             : ${ip_addr}"
-  log "ns_server           : ${ns_server}"
-  log "ttl                 : ${ttl}"
-  log "key_id              : ${key_id}"
-  log "key_path            : ${key_path}"
-  log "dsprocess_path      : ${dsprocess_path}"
-  log "domain_key          : ${domain_key}"
-  log "domain_conf         : ${domain_conf}"
-}
 
 # @function config_init
 # initalises the variables needed for a typical dnssec operation using nsupadte and rndc
@@ -64,8 +63,8 @@ function config_init() {
   domain_key="/etc/bind/rndc.${view}.key"
   domain_conf="/etc/bind/rndc.${view}.conf"
   domain_parent="$(parent_domain $domain)"
-  depth="$(tld_depth $domain)"
-  parent_depth="$(tld_depth $domain_parent)"
+  depth=$(tld_depth $domain)
+  parent_depth=$(tld_depth $domain_parent)
 
   log "view ............: ${view}"
   log "depth ...........: ${depth}"
@@ -125,7 +124,7 @@ function config_init() {
   # find the id for the currently active KSK for the provided domain
   find_valid_ksk_file
 
-  log "found_ksk_key ....: ${found_key}"
+  log "found_key ........: ${found_key}"
   [[ ${#key_id} -lt 5 ]] && key_id=$(printf "%05d" "${key_id}")
   log "key_id ...........: ${key_id}"
   log "ksk_file .........: ${ksk_file}"
@@ -171,14 +170,13 @@ function find_valid_ksk_file() {
 
 function find_view_from_ksk_id() {
   declare -i sleep_time=1
-  declare -i max_sleep=20
+  declare -i max_sleep=10
   declare -i curr_sleep=0
-  while [[ $key_found == "false" ]]; do
+  while [[ $found_key == "false" ]]; do
     if [[ $max_sleep -le $curr_sleep ]]; then
-      log "...cant wait any longer for key: ${key_file}"
-      break
+      log "giving up waiting for key to be generated: ${key_file}"
+      return 1
     fi
-
     for view in "${views[@]}"; do
       find_valid_ksk_file
       if [[ $found_key == "true" ]]; then
@@ -189,6 +187,7 @@ function find_view_from_ksk_id() {
     log "current_sleep:$curr_sleep"
     sleep $sleep_time
   done
+  return 0
 }
 
 function containsElement() {
@@ -199,42 +198,39 @@ function containsElement() {
 }
 
 function refresh_domain() {
-  rndc_out="$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean 2>&1)"
-  log "$(success_icon $?)...syncing ............: all views"\n"${rndc_out}"
+  local domain=$1
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}" 2>&1)
+  log "$(success_icon $?) syncing ............: ${domain}/${view} ${rndc_out}"
 
-  rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
-  log "$(success_icon $?)...flushing view ......: ${view}"
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}" 2>&1)
+  log "$(success_icon $?) flushing view ......: ${view} ${rndc_out}"
 
-  rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" thaw "${domain}" IN "${view}"
-  log "$(success_icon $?)...thawing ............: ${domain} in ${view}"
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" thaw "${domain}" IN "${view}" 2>&1)
+  log "$(success_icon $?) thawing ............: ${domain} in ${view} ${rndc_out}"
 }
 
 function notify_domain() {
-  rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
-  log "$(success_icon $?)...notifying ${domain}"
-
-  rndc -c ${domain_conf} -k ${domain_key} notify "${domain_parent}" IN "${view}"
-  log "$(success_icon $?)...notifying ${domain_parent}"
+  local domain=$1
+  rndc_out=$(rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}" 2>&1)
+  log "$(success_icon $?) notifying ${domain} ${rndc_out}"
 }
 
 function prepare_domain() {
-  rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
-  log "$(success_icon $?)...flushing view ......: ${view}"
+  local domain=$1
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}" 2>&1)
+  log "$(success_icon $?) flushing view ......: ${view} ${rndc_out}"
 
   # rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" freeze "${domain_parent}" IN "${view}"
-  # log "$(success_icon $?)...freezing ...........: ${domain_parent} in ${view}"
+  # log "$(success_icon $?) freezing ...........: ${domain_parent} in ${view}"
 
   # rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" freeze "${domain}" IN "${view}"
-  # log "$(success_icon $?)...freezing ...........: ${domain} in ${view}"
+  # log "$(success_icon $?) freezing ...........: ${domain} in ${view}"
 
-  rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean
-  log "$(success_icon $?)...syncing ............: all views"
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}" 2>&1)
+  log "$(success_icon $?) syncing ............: all views ${rndc_out}"
 
-  rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain_parent}" IN "${view}"
-  log "$(success_icon $?)...thawing ............: ${domain_parent} in ${view}"
-
-  rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain}" IN "${view}"
-  log "$(success_icon $?)...thawing ............: ${domain} in ${view})"
+  rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain}" IN "${view}" 2>&1)
+  log "$(success_icon $?) thawing ............: ${domain} in ${view} ${rndc_out}"
 }
 
 # check the component parts of a domain in reverse to see if they can be matched against a list of tlds
@@ -250,6 +246,10 @@ function tld_depth() {
 
   domain_var=${domain//\./_}
   domain_var=${domain_var^^}
+  (
+    set -o posix
+    set
+  ) | grep DOMAIN_ >&2
   declare -xn depth_var="DOMAIN_${domain_var}_DEPTH"
 
   # @todo fix this cache
