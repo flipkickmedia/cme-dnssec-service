@@ -59,9 +59,12 @@ declare domain_parent
 declare depth
 declare found_key=false
 declare ksk_file
+declare nsupdate_out
+declare rndc_out
 
 config_init
-prepare_domain
+prepare_domain $domain
+prepare_domain $domain_parent
 
 if [[ $found_key == "true" ]]; then
   log "handling KSK publish for: ${domain}"
@@ -92,33 +95,36 @@ if [[ $cds == "" ]]; then
 fi
 
 ds=$(dnssec-dsfromkey -a SHA-384 "${key_path}/${view}/K${domain}.+014+${key_id}.key" | awk '{print $4" "$5" "$6" "$7}')
-log "DS:$ds"
 
-rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
+rndc_out=$(rndc -k ${domain_key} -c ${domain_conf} thaw ${domain_parent} in ${view} 1>&2)
+log "$(success_icon $?) thawed .....: ${domain_parent} in ${view} ${rndc_out}"
 
-# if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
-log "$(
-  cat <<EOF
+if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+  log "$(
+    cat <<EOF
 nsupdate -k "${domain_key}"
 server ${ns_server}
 zone ${domain_parent}. in ${view}
-add ${domain}. ${TTL} DS $ds
+add ${domain}. ${ttl} DS $ds
 send
 EOF
-)"
-# fi
+  )"
+fi
 
-nsupdate -l "${ip_addr}" -k "${domain_key}" < <(
+nsupdate_out=$(nsupdate -k "${domain_key}" < <(
   cat <<EOF
 server ${ns_server}
 zone ${domain_parent}. in ${view}
-add ${domain}. ${TTL} DS $ds
+add ${domain}. ${ttl} DS $ds
 send
 EOF
-)
+) 2>&1)
+log "$(success_icon $?) updated ns server (add DS record to ${domain_parent}) ${nsupdate_out}"
 
-refresh_domain
-notify_domain
+refresh_domain $domain_parent
+notify_domain $domain_parent
+refresh_domain $domain
+notify_domain $domain
 
 dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
 dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
