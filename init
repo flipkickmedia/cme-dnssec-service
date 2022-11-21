@@ -26,7 +26,8 @@ if [[ $# -lt 6 || $# -gt 6 ]]; then
   echo "  $ update 127.0.0.1 192.168.88.2 test.com \"\" externals-master"
   exit 1
 fi
-echo "init: $@"
+
+
 if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
@@ -34,45 +35,30 @@ fi
 
 if [[ -f "${DIR}/lib.sh" ]]; then
   # shellcheck disable=SC1091
-  echo "...loading lib"
   . "${DIR}/lib.sh"
 fi
 
-declare domain=${DOMAIN:-$1}
-declare view=${VIEW:-$2}
-declare ip_addr=${IP_ADDR:-$3}
-declare ns_server=${NS_SERVER:-$4}
-declare ttl=${TTL:-$5}
-declare key_id=${KEY_ID:-$6}
-declare key_path=${KEY_PATH:-${DATA_PATH}/keys}
-declare dsprocess_path=${DSPROCESS_PATH:-/tmp/cme/dsprocess}
-declare domain_key=/etc/bind/rndc.${view}.key
-declare domain_conf=/etc/bind/rndc.${view}.conf
+log "init: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
 declare domain_parent
-declare record
 declare depth
+declare found_key=false
+declare ksk_file
 
-
-domain_parent=$(parent_domain ${domain})
-
-log "domain              : ${domain}"
-log "view                : ${view}"
-log "ip_addr             : ${ip_addr}"
-log "ns_server           : ${ns_server}"
-log "ttl                 : ${ttl}"
-log "key_id              : ${key_id}"
-log "domain_parent       : ${domain_parent}"
-log "domain_key          : ${domain_key}"
-log "domain_conf         : ${domain_conf}"
-log "dsprocess_path      : ${dsprocess_path}"
-
+declare record
+config_init
 prepare_domain
-
-if [[ ! -d "${dsprocess_path}/${view}" ]]; then
-  mkdir "${dsprocess_path}/${view}"
-fi
-chown root:root "${dsprocess_path}/${view}"
-chmod 770
 
 log "$(success_icon $?)...flushing ${domain_parent}"
 rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
@@ -82,13 +68,13 @@ readarray -td $'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +n
 readarray -td $'\n' cds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". CDS)
 readarray -td $'\n' ds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". DS)
 
-log ""
-log "ds_dnskey_records:"
-log "${ds_dnskey_records[*]}"
-log "cds_records:"
-log "${cds_records[*]}:"
-log "ds_records"
-log "${ds_records[*]}:"
+# log ""
+# log "ds_dnskey_records:"
+# log "${ds_dnskey_records[*]}"
+# log "cds_records:"
+# log "${cds_records[*]}:"
+# log "ds_records"
+# log "${ds_records[*]}:"
 
 declare cds_key_id
 declare -a record_parts
@@ -97,22 +83,23 @@ declare key_id
 
 # if we have no CDS records, we need to add the DS records to the parent domain
 if [[ ${#cds_records} -ne ${#ds_records} ]]; then
-  log "diff in ds/cds records:"
-  for ds_record in "${ds_dnskey_records[@]}"; do
-    log "ds_record: ${ds_record}"
-  done
+  # log "diff in ds/cds records:"
+  # for ds_record in "${ds_dnskey_records[@]}"; do
+  #   log "ds_record: ${ds_record}"
+  # done
   for ds_record in "${ds_dnskey_records[@]}"; do
     record_parts=()
-    log "processing: ${ds_record}"
+    # log "processing: ${ds_record}"
     record="$(echo -e "${ds_record}" | awk '{print $4" "$5" "$6" "$7}')"
     key_id="$(echo -e "${ds_record}" | awk '{print $4}')"
-
     cds_key_id="$(echo -e "${cds_records[0]}" | awk '{print $1}')"
 
-    if grep -q "KSK: ${domain_conf}" "$f"; then
-      if ! grep -q "Successor:" "$f"; then
-        id=$(echo "$f" | grep -Po '\d+' | tail -n 1)
-        log "found KSK key: $f"
+    # echo domain:$domain view:$view key_id:$key_id key:$KEY_PATH/${view}/K$domain.+014+$key_id.state
+    declare key_state_file="$KEY_PATH/${view}/K$domain.+014+$key_id.state"
+    # check the kwy provided matches a
+    if grep -q "KSK: ${domain_conf}" "$key_state_file"; then
+      if ! grep -q "Successor:" "$key_state_file"; then
+        log "found KSK key: $key_state_file"
         found_key=true
       fi
     fi
@@ -123,7 +110,7 @@ if [[ ${#cds_records} -ne ${#ds_records} ]]; then
 
     nsupdate -k ${domain_key} <<EOFT
 server ${ns_server}
-local ${ip_address}
+local ${ip_addr}
 zone ${domain_parent}.
 update add ${domain}. ${ttl} CDS $record
 send
@@ -132,7 +119,7 @@ EOFT
     log "$(success_icon $?)...added CDS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
 
     nsupdate -k ${domain_key} <<EOFT
-local ${ip_address}
+local ${ip_addr}
 server ${ns_server}
 zone ${domain_parent}.
 update add ${domain}. ${ttl} DS $record
@@ -141,16 +128,16 @@ quit
 EOFT
     log "$(success_icon $?)...added DS key domain:$domain domain_parent:$domain_parent key_id:${key_id}"
 
-    log "$(success_icon $?)...flushing ${domain_parent}"
+    log "$(success_icon $?)...flushing ...: ${domain_parent}"
     rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
 
-    log "$(success_icon $?)...syncing"
+    log "$(success_icon $?)...syncing ....: all "
     rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
 
-    log "$(success_icon $?)...notifying ${domain}"
+    log "$(success_icon $?)...notifying ..: ${domain}"
     rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
 
-    log "$(success_icon $?)...notifying ${domain_parent}"
+    log "$(success_icon $?)...notifying ..: ${domain_parent}"
     rndc -c ${domain_conf} -k ${domain_key} notify "${domain_parent}" IN "${view}"
   done
 fi

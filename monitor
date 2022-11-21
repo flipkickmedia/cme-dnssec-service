@@ -27,12 +27,10 @@ if [[ $1 == '--clean' ]]; then
 
   if [[ -f "${DIR}/lib.sh" ]]; then
     # shellcheck disable=SC1091
-    echo "...loading lib ${DIR}/lib.sh"
     . "${DIR}/lib.sh"
   fi
   # shellcheck disable=SC2153
   if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
-    echo "...loading /etc/cme/dnssec-monitor.env"
     # shellcheck disable=SC1091
     . "/etc/cme/dnssec-monitor.env"
   fi
@@ -70,11 +68,14 @@ if [[ $1 == '--clean' ]]; then
 fi
 
 if [[ $1 == '--init' ]]; then
+  log ""
+  log ""
   log "monitor (initalise keys) running on $$"
+
+  echo $$ >/tmp/cme/init.pid
 
   if [[ -f "${DIR}/lib.sh" ]]; then
     # shellcheck disable=SC1091
-    echo "...loading lib ${DIR}/lib.sh"
     . "${DIR}/lib.sh"
   fi
 
@@ -104,6 +105,7 @@ if [[ $1 == '--init' ]]; then
   declare domain_parent
   declare record
   declare depth
+  declare parent_depth
   declare iface
   declare iface_name
   declare key_name
@@ -112,74 +114,62 @@ if [[ $1 == '--init' ]]; then
 
   # shellcheck disable=SC2068
   for view in "${views[@]}"; do
-    echo view check
-    config_init
-
-    declare dsprocess_path="${DSPROCESS_PATH}"
-    declare key_path
     for file in /var/cache/bind/keys/"${view}"/*.state; do
-      key_path_prefix="${key_path}/${view}/K"
+      key_path_prefix="${KEY_PATH}/${view}/K"
       key="${file//$key_path_prefix/}"
       key="${key//\.state/}"
-      readarray -td '.' domain_parts < <(printf "%s" "$key")
-      readarray -td '' array_reversed < <(
-        ((${#domain_parts[@]})) && printf '%s\0' "${domain_parts[@]}" | tac -s ''
-      )
-      unset 'array_reversed[0]'
-      readarray -td '' domain_parts < <(
-        ((${#array_reversed[@]})) && printf '%s\0' "${array_reversed[@]}" | tac -s ''
-      )
 
       if grep -q "KSK: yes" "$file"; then
         if ! grep -q "Successor:" "$file"; then
-          id=$(echo "$f" | grep -Po '\d+' | tail -n 1)
-          found_key=true
-          #dev.node.flipkick.media.+014+19137
+          # key example: dev.node.flipkick.media.+014+19137
           key_domain_split_regex='(.*)\.\+(.*)\+(.*)$'
           if [[ $key =~ $key_domain_split_regex ]]; then
             key_id=${BASH_REMATCH[3]}
             domain=${BASH_REMATCH[1]}
           fi
-          log "found KSK key_id: ${key_id} domain:${domain}"
+          found_key=true
         else
           continue
         fi
       else
         continue
       fi
-
-      if [[ ! -d "${dsprocess_path}/${view}" ]]; then
-        mkdir -p "${dsprocess_path}/${view}"
-      fi
-      chown root:root "${dsprocess_path}"
-      chmod 777 "${dsprocess_path}"
-
-      # if [[ ! -f "${dsprocess_path}/${view}/${domain}.dsprocess" ]]; then
-      log "creating dsprocess lock: ${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
-      touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
-      log "domain: ${domain} view:${view}"
-      log "thawing domain: ${domain}"
-
       config_init
 
-      if [[ $depth -le 1 ]]; then
+      log ""
+      log ""
+      log ""
+      log "found KSK key:$key id:$id key_id: ${key_id} domain:${domain}"
+
+      if [[ -f "${dsprocess_path}/${view}/${domain}.dsprocess" ]]; then
+        rm "${dsprocess_path}/${view}/${domain}.dsprocess"
+      fi
+
+      log "creating dsprocess lock: ${dsprocess_path}/${view}/${domain}.dsprocess"
+      touch "${dsprocess_path}/${view}/${domain}.dsprocess"
+
+      if [[ $depth -gt 1 ]]; then
         "${DIR}/clean" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
         resclean=$?
         log "result from clean was $?"
         "${DIR}/init" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
         log "result from init was $?"
         resinit=$?
+        refresh_domain
+      else
+        log "skipping domain as it is next to a TLD"
       fi
 
-      rndc -k "${domain_key}" -c "${domain_conf}" sync -clean "${domain}" in "${view}"
-      rndc -k "${domain_key}" -c "${domain_conf}" flush
-      rndc -k "${domain_key}" -c "${domain_conf}" thaw "${domain}" in "${view}"
       # else
       #   log "domain locked"
       # fi
+      if [[ -f "${dsprocess_path}/${view}/${domain}.dsprocess" ]]; then
+        rm "${dsprocess_path}/${view}/${domain}.dsprocess"
+      fi
     done
   done
   log "monitor (initialise keys) terminating on PID:$$"
+  rm /tmp/cme/init.pid
   exit 0
 fi
 
@@ -243,11 +233,11 @@ fi
 function trap_exit() {
   if [[ -n $monitor_pid && -n $(ps -p "$monitor_pid") ]]; then
     log "monitor terminating on PID:$monitor_pid"
-    kill -1 "$monitor_pid"
+    kill -1 "$monitor_pid" 2>/dev/null
     wait "$monitor_pid"
   fi
   if [[ -n $tail_pid && -n $(ps -p "$tail_pid") ]]; then
-    kill -1 "$tail_pid"
+    kill -1 "$tail_pid" 2>/dev/null
     wait "$tail_pid"
   fi
   exit 0
@@ -268,16 +258,11 @@ if [[ $# -eq 0 ]]; then
   log "MONITORING BIND LOGS ... : ${files}"
   log "VIEWS .................. : ${views[*]}"
 
-  declare ip_addr
-  declare ns_server
-  declare domain
-  declare ttl
-  declare view
-  declare record
-
   trap "trap_exit" SIGINT SIGHUP 15
 
-  LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --init &
+  if [[ -z $SKIP_INIT || $SKIP_INIT -eq 0 ]]; then
+    LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --init &
+  fi
 
   LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --clean &
 
@@ -285,11 +270,44 @@ if [[ $# -eq 0 ]]; then
   #LOGGER_FLAGS=${LOGGER_FLAGS} "${DIR}/monitor" --init &
 
   declare -i monitor_pid=$!
-  declare -i key_found=0
+  declare key_found=false
 
   # main monitoring/update
   (
+    declare domain
+    declare view
+    declare ip_addr
+    declare ns_server
+    declare -i ttl
+    declare key_id
+    declare key_path
+    declare ksk_key_path
+    declare key_name
+    declare key
+    declare dsprocess_path
+    declare domain_key
+    declare domain_conf
+    declare domain_parent
+    declare -i depth
+    declare -i parent_depth
+    declare found_key=false
+    declare ksk_file
+    declare iface
+    declare iface_name
+    declare sleep_time=1
+    declare -i max_sleep=20
+    declare -i curr_sleep=0
+    declare record
+
     log "monitoring log"
+
+    # wait for init process
+    while [[ -f /tmp/cme/init.pid ]]; do
+      sleep 2
+    done
+
+    readarray -td: views < <(printf '%s' "$VIEWS")
+
     # if [[ -f "${DIR}/lib.sh" ]]; then
     #   # shellcheck disable=SC1091
     #   . "${DIR}/lib.sh"
@@ -301,28 +319,17 @@ if [[ $# -eq 0 ]]; then
         # example
         # Nov 11 17:25:06 ninja named[3260031]: 11-Nov-2022 17:25:06.474 general: notice: zone prod.node.flipkick.media/IN/internals-master (signed): checkds: empty DS response from 192.168.88.254#53
         if grep -P '.*checkds: empty DS response.*' <<<"$line"; then
+          found_key=false
           # @todo check to make sure we init a new key on domains we have control of.
           log "trigger line: $line"
           # capture view from message
           if [[ $line =~ $empty_ds_regex ]]; then
             domain=${BASH_REMATCH[1]}
             view=${BASH_REMATCH[2]}
-
-            declare ip_addr
-            declare ns_server
-            declare iface
-            declare key_name
-            declare key
-
-            config_init "$view"
-
-            # check if domain is next to a tld
-            domain_parent=$(parent_domain $domain)
-            depth=$(tld_depth $domain_parent)
-            declare depth=$(tld_depth "${domain_parent}")
+            config_init
 
             if [[ $depth -le 1 ]]; then
-              log "aborting can't update: ${domain} is TLD"
+              log "aborting can't update: ${domain} parent:${domain_parent} depth:$depth parent_depth:$parent_depth"
             elif [[ $depth -gt 1 ]]; then
               log ""
               log ""
@@ -339,6 +346,7 @@ if [[ $# -eq 0 ]]; then
               # log "iface_var ...: ${iface_var}"
               # log "iface_name...: ${iface_name}"
               # log "iface........: ${iface}"
+              # log "ns_server_var....: ${ns_server_var}"
               # log "ip_addr .....: ${ip_addr}"
               # log "ns_server....: ${ns_server}"
               # log "CONF_PATH....: ${CONF_PATH}"
@@ -353,100 +361,47 @@ if [[ $# -eq 0 ]]; then
         # example
         # line='04-Jun-2022 07:12:02.164 dnssec: info: DNSKEY node.flipkick.media/ECDSAP384SHA384/29885 (KSK) is now published'
         if grep -P '.*info: DNSKEY.*\(KSK\).*published.*' <<<"$line"; then
-          log ""
-          log ""
-          log ""
-          key_found=0
+          found_key=false
           domain=$(awk '{print $6}' <<<"${line//\// }")
-          A="00000"
-          B="$(awk '{print $8}' <<<"${line//\// }")"
-          #key_id="$(echo "${A:0:-${#B}}$B")"
-          key_id="${A:0:-${#B}}$B"
+          key_id="$(awk '{print $8}' <<<"${line//\// }")"
+          find_view_from_ksk_id
+          config_init
 
-          declare sleep_time=1
-          declare -i max_sleep=20
-          declare curr_sleep=0
-
-          while [[ $key_found -eq 0 && $curr_sleep -lt $max_sleep ]]; do
-            if [[ ${max_sleep} -lt ${curr_sleep} ]]; then
-              log "...cant wait any longer for key: ${key_file}"
-              break
+          if [[ $found_key == "true" ]]; then
+            log ""
+            log ""
+            log ""
+            log "handling KSK publish"
+            if [[ -f "${DIR}/add" ]]; then
+              log "running: ${DIR}/add"
+              "${DIR}/add" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
+              log "result from add was $?"
+            else
+              log "can't find cmd: ${DIR}/add"
             fi
-
-            for view in "${views[@]}"; do
-              key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
-              if [[ -f "${key_file}" ]]; then
-                key_found=1
-                log "KSK Published!"
-                log "domain:${domain}"
-                log "key_id:${key_id}"
-                log "view:${view}"
-                log "key_file: ${key_file}"
-                # if [[ ! -f "${DSPROCESS_PATH}/${view}/${domain}.dsprocess" ]]; then
-                #   touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
-                log "running: ${DIR}/add"
-                if [[ -f "${DIR}/add" ]]; then
-                  "${DIR}/add" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-                  #                \$domain \$view \$ip_addr \$ns_server \$ttl \$key_id"
-                  log "result from add was $?"
-                else
-                  log "can't find cmd: ${DIR}/add"
-                fi
-                break 2
-                # fi
-              fi
-            done
-            curr_sleep=$(expr $curr_sleep + $sleep_time)
-            sleep 1
-          done
-
-          if [[ $key_found -eq 0 ]]; then
+          else
             log "KSK Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
           fi
         fi
         # example
         # line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
         if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
+          key_found=false
           log ""
           log ""
-          log "$line"
-          key_found=0
-          domain=$(awk '{print $8}' <<<"${line//\// }")
-          A="00000"
-          B="$(awk '{print $10}' <<<"${line//\// }")"
-          key_id="${A:0:-${#B}}$B"
-          declare sleep_time=1
-          declare -i max_sleep=20
-          declare curr_sleep=0
-          while [[ $key_found -eq 0 && $curr_sleep -lt $max_sleep ]]; do
-            if [[ ${max_sleep} -lt ${curr_sleep} ]]; then
-              log "...cant wait any longer for key: ${key_file}"
-              break
-            fi
+          log ""
+          domain="$(awk '{print $8}' <<<"${line//\// }")"
+          key_id="$(awk '{print $10}' <<<"${line//\// }")"
 
-            for view in "${views[@]}"; do
-              key_file="/var/cache/bind/keys/${view}/K${domain}.+014+${key_id}.key"
-              if [[ -f "${key_file}" ]]; then
-                key_found=1
-                log "CDS Published!"
-                log "domain:${domain}"
-                log "key_id:${key_id}"
-                log "view:${view}"
-                log "key_file: ${key_file}"
-                # if [[ ! -f "${DSPROCESS_PATH}/${view}/${domain}.dsprocess" ]]; then
-                #   touch "${DSPROCESS_PATH}/${view}/${domain}.dsprocess"
+          find_view_from_ksk_id
+          config_init
 
-                log "running: ${DIR}/add"
-                "${DIR}/update" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-                log "result from update was $?"
-                break 2
-                # fi
-              fi
-            done
-            curr_sleep=$(expr $curr_sleep + $sleep_time)
-            sleep 1
-          done
-          if [[ $key_found -eq 0 ]]; then
+          if [[ $found_key == "true" ]]; then
+            log "handling CDS publish"
+            log "running: ${DIR}/update"
+            "${DIR}/update" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
+            log "result from update was $?"
+          else
             log "CDS Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
           fi
         fi

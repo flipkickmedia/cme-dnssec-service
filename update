@@ -44,40 +44,25 @@ if [[ -f "${DIR}/lib.sh" ]]; then
   . "${DIR}/lib.sh"
 fi
 
-declare domain=${DOMAIN:-$1}
-declare view=${VIEW:-$2}
-declare ip_addr=${IP_ADDR:-$3}
-declare ns_server=${NS_SERVER:-$4}
-declare ttl=${TTL:-$5}
-declare key_id=${KEY_ID:-$6}
-declare dsprocess_path=${DSPROCESS_PATH:-/tmp/cme/dsprocess}
-declare domain_key=/etc/bind/rndc.${view}.key
-declare domain_conf=/etc/bind/rndc.${view}.conf
+echo "add: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
 declare domain_parent
-declare record
+declare depth
+declare found_key=false
+declare ksk_file
 
-key_id=$(printf "%05d" "${key_id}")
-
-declare key_path="${KEY_PATH}/${view}/K${domain}.+014+${key_id}.key"
-
-domain_parent=$(parent_domain ${domain})
-render_params
-
-if [[ ! -f "${domain_key}" ]]; then
-  log "rndc key file not found at ${domain_key}! Aborting"
-  exit 2
-fi
-
-if [[ ! -f "${key_path}" ]]; then
-  log "${key_path} NOT found! Aborting."
-  exit 2
-fi
-
-if [[ ! -d "${dsprocess_path}/${view}" ]]; then
-  mkdir "${dsprocess_path}/${view}"
-fi
-chown root:root "${dsprocess_path}/${view}"
-chmod 770
+config_init
 
 log "removing old nsup"
 rm "${dsprocess_path}/${view}/nsup.${domain}"
@@ -86,13 +71,13 @@ nsup_file=${dsprocess_path}/${view}/nsup.${domain}
 dsset_file=${dsprocess_path}/${view}/dsset-${view}-${domain}
 cds_file=${dsprocess_path}/${view}/file-${view}-${domain}
 
-touch "${dsset_fileprocess_path}/${view}/dsset-${view}-${domain}."
+touch "${dsprocess_path}/${view}/dsset-${view}-${domain}."
 touch "${dsprocess_path}/${view}/file-${view}-${domain}"
 touch "${dsprocess_path}/${view}/nsup.${domain}"
 
 mkdir -p "${dsprocess_path}/${view}"
 if [[ ! -f "${dsprocess_path}/${view}/dsset-${domain}." ]]; then
-log "creating dnsec-cds DS dsset file"
+  log "creating dnsec-cds DS dsset file"
   dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
 fi
 log "creating dnsec-cds CDS file"
@@ -104,12 +89,13 @@ log "$(dnssec-cds -a SHA-384 -s-86400 -T "${ttl}" -u -i -f "${dsprocess_path}/${
 log "content dnsec-cds CDS file"
 echo ${dsprocess_path}/${view}/file-${domain}
 cat ${dsprocess_path}/${view}/file-${domain}
+
 log "content dnsec-cds nsup file"
 echo ${dsprocess_path}/${view}/nsup.${domain}
 cat ${dsprocess_path}/${view}/nsup.${domain}
 
 log "thawing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" thaw ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
 
 log "$(
   cat <<EOF
@@ -134,22 +120,22 @@ quit
 EOFT
 
 log "freezing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" freeze ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain_parent} in ${view}
 log "syncing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" sync -clean ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain_parent} in ${view}
 log "thawing ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" thaw ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
 
 log "freezing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" freeze ${domain} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain} in ${view}
 log "syncing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" sync -clean ${domain} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain} in ${view}
 log "thawing ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" thaw ${domain} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain} in ${view}
 
 log "notifying ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" notify ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain_parent} in ${view}
 log "notifying ${DOMAIN} in ${view}"
-rndc -k "${domain_key}" -c "${CONF_PATH}/rndc.${view}.conf" notify ${DOMAIN} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain} in ${view}
 
 exit 0

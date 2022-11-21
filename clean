@@ -35,7 +35,6 @@ fi
 
 if [[ -f "${DIR}/lib.sh" ]]; then
   # shellcheck disable=SC1091
-  echo "...loading lib"
   . "${DIR}/lib.sh"
 fi
 
@@ -45,48 +44,17 @@ declare ip_addr="${IP_ADDR:-$3}"
 declare ns_server="${NS_SERVER:-$4}"
 declare ttl="${TTL:-$5}"
 declare key_id="${KEY_ID:-$6}"
-declare dsprocess_path="${DSPROCESS_PATH:-/tmp/cme/dsprocess}"
-declare domain_key="${CONF_PATH}/rndc.${view}.key"
-declare domain_conf="${CONF_PATH}/rndc.${view}.conf"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
 declare domain_parent
-declare record
+declare depth
+declare found_key=false
+declare ksk_file
 
-key_id=$(printf "%05d" "${key_id}")
-declare key_path="${KEY_PATH}/${view}/K${domain}.+014+${key_id}.key"
-domain_parent=$(parent_domain ${domain})
-
-render_params
-
-if [[ ! -f "${domain_key}" ]]; then
-  log "rndc key file not found at ${domain_key}! Aborting"
-  exit 2
-fi
-
-if [[ ! -f "${key_path}" ]]; then
-  log "${key_path} NOT found! Aborting."
-  exit 2
-fi
-
-if [[ ! -d "${dsprocess_path}/${view}" ]]; then
-  mkdir "${dsprocess_path}/${view}"
-fi
-chown root:root "${dsprocess_path}/${view}"
-chmod 770
-
-# shellcheck disable=SC2086,2155
-domain_parent="$(parent_domain $domain)"
-domain_key="/etc/bind/rndc.${view}.key"
-domain_conf="/etc/bind/rndc.${view}.conf"
-
-log "ip_addr             : ${ip_addr}"
-log "ns_server           : ${ns_server}"
-log "domain_parent       : ${domain_parent}"
-log "domain              : ${domain}"
-log "view                : ${view}"
-log "ttl                 : ${ttl}"
-log "domain_key          : ${domain_key}"
-log "domain_conf         : ${domain_conf}"
-
+config_init
 prepare_domain
 
 nsupdate -k "${domain_key}" <<EOFT
@@ -96,7 +64,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean ${domain} DS parent records"
+log "$(success_icon $?)...clean .......: ${domain} DS parent records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -105,7 +73,7 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean ${domain} CDS parent records"
+log "$(success_icon $?)...clean .......: ${domain} CDS parent records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -114,7 +82,7 @@ update del ${domain}. DS
 send
 quit
 EOFT
-log "$(success_icon $?)...clean ${domain} DS records"
+log "$(success_icon $?)...clean .......: ${domain} DS records"
 
 nsupdate -k "${domain_key}" <<EOFT
 server ${ns_server}
@@ -123,27 +91,27 @@ update del ${domain}. CDS
 send
 quit
 EOFT
-log "...clean ${domain} CDS records$(success_icon $?)"
+log "$(success_icon $?)...clean .......: ${domain} CDS records"
 
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain_parent}" IN "${view}"
-log "$(success_icon $?)...syncing           : all views"
+log "$(success_icon $?)...syncing .....: all views"
 
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" flush "${view}"
-log "$(success_icon $?)...flushing ${view}"
+log "$(success_icon $?)...flushing.....: ${view}"
 
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain_parent}" IN "${view}"
 rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" notify "${domain}" IN "${view}"
-log "$(success_icon $?)...notifying ${view}"
+log "$(success_icon $?)...notifying ...: ${view}"
 
 # get the records
 readarray -td$'\n' ds_dnskey_records < <(dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}")
 readarray -td$'\n' cds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". CDS)
 readarray -td$'\n' ds_records < <(dig -b "${ip_addr}" "@${ns_server}" +short +norecurse "${domain}". DS)
 
-log "ds_dnskey_records:"
-log "${ds_dnskey_records[*]}"
-log "cds_records:"
-log "${cds_records[*]}"
-log "ds_records:"
-log "${ds_records[*]}"
+# log "ds_dnskey_records:"
+# log "${ds_dnskey_records[*]}"
+# log "cds_records:"
+# log "${cds_records[*]}"
+# log "ds_records:"
+# log "${ds_records[*]}"

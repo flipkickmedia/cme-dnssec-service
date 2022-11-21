@@ -39,77 +39,59 @@ fi
 
 if [[ -f "${DIR}/lib.sh" ]]; then
   # shellcheck disable=SC1091
-  echo "...loading lib ${DIR}/lib.sh"
   . "${DIR}/lib.sh"
 fi
 
-declare domain=${DOMAIN:-$1}
-declare view=${VIEW:-$2}
-declare ip_addr=${IP_ADDR:-$3}
-declare ns_server=${NS_SERVER:-$4}
-declare ttl=${TTL:-$5}
-declare key_id=${KEY_ID:-$6}
-declare key_path=${KEY_PATH:-${DATA_PATH}/keys}
-declare dsprocess_path=${DSPROCESS_PATH:-/tmp/cme/dsprocess}
-declare domain_key=/etc/bind/rndc.${view}.key
-declare domain_conf=/etc/bind/rndc.${view}.conf
+echo "add: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
 declare domain_parent
-declare record
+declare depth
+declare found_key=false
+declare ksk_file
 
-domain_parent=$(parent_domain ${domain})
-render_params
-
+config_init
 prepare_domain
 
-log "adding KSK for ${domain}"
-
-if [[ ! -d "${dsprocess_path}/${view}" ]]; then
-  mkdir "${dsprocess_path}/${view}"
-fi
-chown root:root "${dsprocess_path}/${view}"
-chmod 770
-
-# find the id for the currently active KSK for the provided domain
-declare found_key=false
-for f in "${key_path}/${view}/K${domain}.+014+"*.state; do
-  if grep -q "KSK: ${domain_conf}yes" "$f"; then
-    if ! grep -q "Successor:" "$f"; then
-      id=$(echo "$f" | grep -Po '\d+' | tail -n 1)
-      log "found KSK key: $f"
-      found_key=true
-    fi
-  fi
-done
-if [[ $found_key == "true" ]];then
-  log "could not locate KSK state: $key_id in ${view}"
+if [[ $found_key == "true" ]]; then
+  log "handling KSK publish for: ${domain}"
+else
+  log "could not locate KSK state: ${key_id} in ${view}"
   exit 1
 fi
-
-f=${f/\.state/\.key}
-log "handling KSK publish - running nsupdate ${domain}"
 
 if [[ ! -f "${domain_key}" ]]; then
   log "rndc key file not found: ${domain_key}"
   exit 1
 fi
 
-if [[ ! -f "${key_path}/${view}/K${domain}.+014+${KEY_ID}.key" ]]; then
-  log "KSK key  NOT found! Aborting: ${key_path}/${view}/K${domain}.+014+${KEY_ID}.key"
+if [[ ! -f "${ksk_file}.key" ]]; then
+  log "KSK key  NOT found! Aborting: ${ksk_file}.key"
   exit 1
 fi
 
 #check to see if we have a CDS key published
-ds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$domain" DS)
+ds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" DS)
 if [[ $ds == "" ]]; then
   log "no DS published for ${domain}/${view}"
 fi
 
-cds=$(dig -b "$ip_addr" "@${NS_SERVER}" +noall +answer "$domain" CDS)
+cds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" CDS)
 if [[ $cds == "" ]]; then
   log "no CDS published for ${domain}/${view}"
 fi
 
-ds=$(dnssec-dsfromkey -a SHA-384 "${key_path}/${view}/K${domain}.+014+${KEY_ID}.key" | awk '{print $4" "$5" "$6" "$7}')
+ds=$(dnssec-dsfromkey -a SHA-384 "${key_path}/${view}/K${domain}.+014+${key_id}.key" | awk '{print $4" "$5" "$6" "$7}')
 log "DS:$ds"
 
 rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
@@ -118,7 +100,7 @@ rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
 log "$(
   cat <<EOF
 nsupdate -k "${domain_key}"
-server ${NS_SERVER}
+server ${ns_server}
 zone ${domain_parent}. in ${view}
 add ${domain}. ${TTL} DS $ds
 send
@@ -128,36 +110,17 @@ EOF
 
 nsupdate -l "${ip_addr}" -k "${domain_key}" < <(
   cat <<EOF
-server ${NS_SERVER}
+server ${ns_server}
 zone ${domain_parent}. in ${view}
 add ${domain}. ${TTL} DS $ds
 send
 EOF
 )
 
-    log "$(success_icon $?)...flushing ${domain_parent}"
-    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" flush ${view}
+refresh_domain
+notify_domain
 
-    log "$(success_icon $?)...syncing"
-    rndc -c ${domain_conf} -k ${domain_key} -s "${ns_server}" sync -clean
-
-    log "$(success_icon $?)...notifying ${domain}"
-    rndc -c ${domain_conf} -k ${domain_key} notify "${domain}" IN "${view}"
-
-    log "$(success_icon $?)...notifying ${domain_parent}"
-    rndc -c ${domain_conf} -k ${domain_key} notify "${domain_parent}" IN "${view}"
-  done
-
-rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain_parent} in ${view}
-
-rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain_parent} in ${view}
-
-log "rndc -k \"${domain_key}\" -c \"${domain_conf}\" notify ${domain_parent} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain_parent} in ${view}
-log "rndc -k \"${domain_key}\" -c \"${domain_conf}\" notify ${domain} in ${view}"
-rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain} in ${view}
-
-dig -b "${ip_addr}" "@${NS_SERVER}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${DSPROCESS_PATH}/${view}/dsset-${domain}." >/dev/null
-dig -b "${ip_addr}" "@${NS_SERVER}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${DSPROCESS_PATH}/${view}/file-${domain}" >/dev/null
+dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
 
 exit 0
