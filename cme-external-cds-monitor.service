@@ -4,7 +4,7 @@ After=cme-dnssec-monitor.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/cme-dnssec-monitor/external-cds-monitor.sh
+ExecStart=/usr/local/sbin/cme-dnssec-monitor/external
 KillSignal=1
 WorkingDirectory=/usr/local/sbin/cme-dnssec-monitor
 KillMode=control-group

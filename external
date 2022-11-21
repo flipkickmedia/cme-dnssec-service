@@ -6,8 +6,11 @@ if [[ ${CME_DNSSEC_EXTERNAL_MONITOR_DEBUG=notloaded} == "notloaded" ]]; then
   # shellcheck disable=SC1091
   . "/etc/cme/dnssec-monitor.env"
 fi
+
 # shellcheck disable=SC1091
 . "${DIR}/lib.sh"
+
+declare -x LOG_PREFIX="external-cds"
 
 # create some common time offsets
 function create_time_offsets() {
@@ -33,13 +36,10 @@ while (true); do
         if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
           echo "running: dig @${server} +short ${domain} CDS"
         fi
-        dig "@{$server}" +short "${domain}" CDS | tee -a "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
-        if [[ $CME_DNSSEC_EXTERNAL_MONITOR_DEBUG -eq 1 ]]; then
-          cat "${DSPROCESS_PATH}/external-cds-$domain-CDS"
-          echo "running: tail -n0 \"${DSPROCESS_PATH}/external-cds-$domain-CDS\""
-        fi
+        dig "@${server}" +short "${domain}" CDS | tee -a "${DSPROCESS_PATH}/external-cds-$domain-CDS" >/dev/null
+        cat "${DSPROCESS_PATH}/external-cds-$domain-CDS"
         if [[ $(stat --printf="%s" "${DSPROCESS_PATH}/external-cds-$domain-CDS") -gt 0 ]]; then
-        # shellcheck disable=SC2034
+          # shellcheck disable=SC2034
           a_record=$(tail -n1 "${DSPROCESS_PATH}/external-cds-$domain-NS-A")
         else
           echo empty file

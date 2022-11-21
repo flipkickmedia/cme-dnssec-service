@@ -22,6 +22,7 @@ empty_ds_regex='zone (.*)/IN/(.*) \('
 
 # clean ds process files which stop repeated additions via nsupdate for the same domain within a given time period
 if [[ $1 == '--clean' ]]; then
+  LOG_PREFIX="clean-monitor"
   log "cme-dnssec-monitor (clean) starting $$"
   log "monitor running on $$ to clean dsprocess locks"
 
