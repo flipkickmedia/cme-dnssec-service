@@ -35,7 +35,7 @@ function parent_domain() {
 }
 
 function log() {
-  local padding="                                           "
+  local padding="                 "
   local src=${BASH_SOURCE[1]//$DIR\//}
   local out="$@"
   src=$(printf '%s' "${LOG_PREFIX}:${src}")
@@ -47,7 +47,6 @@ function success_icon() {
   [[ $1 -ne 0 ]] && echo -e "❌" && return "$1"
 }
 
-
 # @function config_init
 # initalises the variables needed for a typical dnssec operation using nsupadte and rndc
 function config_init() {
@@ -58,6 +57,8 @@ function config_init() {
   key_name="${!key_var}"
   declare key_name_var="${key_name^^}"
   declare key_name_var="${key_name_var//-/_}"
+
+  [[ ${#key_id} -lt 5 ]] && key_id=$(printf "%05d" "${key_id}")
   ksk_key_path="${key_path}/${view}/K${domain}.+014+${key_id}.key"
   ksk_state_path="${key_path}/${view}/K${domain}.+014+${key_id}.state"
   domain_key="/etc/bind/rndc.${view}.key"
@@ -65,12 +66,6 @@ function config_init() {
   domain_parent="$(parent_domain $domain)"
   depth=$(tld_depth $domain)
   parent_depth=$(tld_depth $domain_parent)
-
-  log "view ............: ${view}"
-  log "depth ...........: ${depth}"
-  log "parent_depth ....: ${parent_depth}"
-  log "domain ..........: ${domain}"
-  log "domain_parent ...: ${domain_parent}"
 
   #log "view_var ........: ${view_var}"
   #log "iface_var .......: ${iface_var}"
@@ -86,12 +81,20 @@ function config_init() {
   key_path=${KEY_PATH}
   #log "key_var .........: ${key_var}"
   #log "key_name_var ....: ${key_name_var}"
-  log "key_name ........: ${key_name}"
-  log "iface_name.......: ${iface_name}"
-  log "iface............: ${iface}"
-  log "ip_addr .........: ${ip_addr}"
-  log "ns_server........: ${ns_server}"
-  log "key_path.........: ${key_path}"
+
+  if [[ $# -eq 0 && $1 == "--no-log" ]]; then
+    log "view ............: ${view}"
+    log "depth ...........: ${depth}"
+    log "parent_depth ....: ${parent_depth}"
+    log "domain ..........: ${domain}"
+    log "domain_parent ...: ${domain_parent}"
+    log "key_name ........: ${key_name}"
+    log "iface_name.......: ${iface_name}"
+    log "iface............: ${iface}"
+    log "ip_addr .........: ${ip_addr}"
+    log "ns_server........: ${ns_server}"
+    log "key_path.........: ${key_path}"
+  fi
 
   if ! ping -c1 -w3 "$ip_addr" >/dev/null 2>&1; then
     log "pinging interface for nsserver $ip_addr $iface_name"
@@ -123,26 +126,31 @@ function config_init() {
 
   # find the id for the currently active KSK for the provided domain
   find_valid_ksk_file
-
-  log "found_key ........: ${found_key}"
-  [[ ${#key_id} -lt 5 ]] && key_id=$(printf "%05d" "${key_id}")
-  log "key_id ...........: ${key_id}"
-  log "ksk_file .........: ${ksk_file}"
-  log "key_path .........: ${key_path}"
+  if [[ $# -eq 0 && $1 == "--no-log" ]]; then
+    log "found_key ........: ${found_key}"
+    log "key_id ...........: ${key_id}"
+    log "ksk_file .........: ${ksk_file}"
+    log "key_path .........: ${key_path}"
+  fi
 
   if [[ ! -f "${domain_key}" ]]; then
     log "rndc key file not found at ${domain_key}! Aborting"
-    exit 2
+    return 2
   fi
+
+  if [[ ! -f "${domain_conf}" ]]; then
+    log "rndc conf file not found at ${domain_conf}! Aborting"
+    return 2
+  fi  
 
   if [[ ! -f "${ksk_file}.key" ]]; then
     log "ksk key file not found at ${ksk_file}.key! Aborting"
-    exit 2
+    return 2
   fi
 
   if [[ ! -d "${key_path}" ]]; then
     log "${key_path} NOT found! Aborting."
-    exit 2
+    return 2
   fi
 
   if [[ ! -d "${dsprocess_path}/${view}" ]]; then
@@ -227,7 +235,7 @@ function prepare_domain() {
   # log "$(success_icon $?) freezing ...........: ${domain} in ${view}"
 
   rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" -s "${ns_server}" sync -clean "${domain}" IN "${view}" 2>&1)
-  log "$(success_icon $?) syncing ............: all views ${rndc_out}"
+  log "$(success_icon $?) syncing ............: ${domain} in ${view} ${rndc_out}"
 
   rndc_out=$(rndc -c "${domain_conf}" -k "${domain_key}" thaw "${domain}" IN "${view}" 2>&1)
   log "$(success_icon $?) thawing ............: ${domain} in ${view} ${rndc_out}"

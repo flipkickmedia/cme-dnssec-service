@@ -61,35 +61,40 @@ declare found_key=false
 declare ksk_file
 declare nsupdate_out
 declare rndc_out
+declare ds_res
 
 config_init
 prepare_domain $domain
 prepare_domain $domain_parent
 
 if [[ $found_key == "true" ]]; then
-  log "handling KSK publish for: ${domain}"
+  log "$(success_icon 0) KSK found ..........: ${domain}"
 else
-  log "could not locate KSK state: ${key_id} in ${view}"
+  log "$(success_icon 0) could not locate KSK state: ${key_id} in ${view}"
   exit 1
 fi
 
 if [[ ! -f "${domain_key}" ]]; then
-  log "rndc key file not found: ${domain_key}"
+  log "$(success_icon 1) rndc key file not found: ${domain_key}"
   exit 1
 fi
 
 if [[ ! -f "${ksk_file}.key" ]]; then
-  log "KSK key  NOT found! Aborting: ${ksk_file}.key"
+  log "$(success_icon 1) KSK key NOT found! Aborting: ${ksk_file}.key"
   exit 1
+else
+  log "$(success_icon 0) KSK key found :) ......: ${ksk_file}.key"
 fi
 
 #check to see if we have a CDS key published
-ds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" DS)
-if [[ $ds == "" ]]; then
-  log "no DS published for ${domain}/${view}"
+ds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" DS 2>&1)
+if [[ $? -eq 0 ]]; then
+  log "$(success_icon 0) got DS records for: ${domain} $dig_out"
+elif [[ -z $ds ]]; then
+  log "$(success_icon 0) no DS records found for: ${domain} $dig_out"
 fi
 
-cds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" CDS)
+cds=$(dig -b "$ip_addr" "@${ns_server}" +noall +answer "$domain" CDS 2>&1)
 if [[ $cds == "" ]]; then
   log "no CDS published for ${domain}/${view}"
 fi

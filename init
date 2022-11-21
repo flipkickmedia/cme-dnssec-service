@@ -101,9 +101,14 @@ if [[ ${#cds_records} -ne ${#ds_records} ]]; then
     # check the kwy provided matches a
     if grep -q "KSK: ${domain_conf}" "$key_state_file"; then
       if ! grep -q "Successor:" "$key_state_file"; then
-        log "found KSK key: $key_state_file"
+        log "$(success_icon 0) found KSK key: $key_state_file"
         found_key=true
       fi
+    fi
+
+    if [[ $found_key == "false" ]];then
+      log "$(success_icon 1) could not validate: $key_state_file"
+      exit 1
     fi
 
     [[ "$key_id" != "$cds_key_id" ]] && continue
@@ -147,6 +152,5 @@ fi
 dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
 dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
 
-log "$(success_icon $?) init completed."
-
+log "$(success_icon 0) init completed."
 exit 0
