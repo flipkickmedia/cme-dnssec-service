@@ -133,7 +133,7 @@ if [[ $1 == '--setup-check' ]]; then
         continue
       fi
 
-      config_init
+      config_init --no-log
 
       log ""
       log ""
@@ -286,8 +286,6 @@ if [[ $# -eq 0 ]]; then
     declare -i curr_sleep=0
     declare record
 
-    log "monitoring log"
-
     # wait for init process
     while [[ -f /tmp/cme/init.pid ]]; do
       sleep 2
@@ -316,10 +314,10 @@ if [[ $# -eq 0 ]]; then
             log "handling empty DS response"
             domain=${BASH_REMATCH[1]}
             view=${BASH_REMATCH[2]}
-            config_init
+            config_init --no-log
 
             if [[ $depth -le 1 ]]; then
-              log "aborting can't update: ${domain} parent:${domain_parent} depth:$depth parent_depth:$parent_depth"
+              log "aborting, can't update parent as it is a TLD: ${domain} parent:${domain_parent} depth:$depth parent_depth:$parent_depth"
             elif [[ $depth -gt 1 ]]; then
               log ""
               log ""
@@ -354,19 +352,14 @@ if [[ $# -eq 0 ]]; then
           found_key=false
           domain=$(awk '{print $6}' <<<"${line//\// }")
           key_id="$(awk '{print $8}' <<<"${line//\// }")"
-
-          log A
           key_path=${KEY_PATH:-/var/cache/bind/keys}
           find_view_from_ksk_id
-          log B
-          config_init
-          log C
-
+          log ""
+          log ""
+          log ""
+          log "handling KSK publish domain:${domain}"
+          config_init --no-log
           if [[ $found_key == "true" ]]; then
-            log ""
-            log ""
-            log ""
-            log "handling KSK publish"
             if [[ -f "${DIR}/add" ]]; then
               log "running: ${DIR}/add"
               "${DIR}/add" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
@@ -382,23 +375,25 @@ if [[ $# -eq 0 ]]; then
         # line='04-Jun-2022 12:00:07.686 general: info: CDS for key node.flipkick.media/ECDSAP384SHA384/16073 is now published'
         if grep -P '.*info: CDS for key.*published.*' <<<"$line"; then
           found_key=false
-          log ""
-          log ""
-          log ""
           domain="$(awk '{print $8}' <<<"${line//\// }")"
           key_id="$(awk '{print $10}' <<<"${line//\// }")"
-
-          key_path=${KEY_PATH:-/var/cache/bind/keys}
-          find_view_from_ksk_id
-          config_init
-
-          if [[ $found_key == "true" ]]; then
-            log "handling CDS publish"
-            log "running: ${DIR}/update"
-            "${DIR}/update" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
-            log "$(success_icon $?) result from update was $?"
-          else
-            log "CDS Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
+          log ""
+          log ""
+          log ""
+          log "handling CDS publish domain:${domain}"
+          config_init --no-log
+          if [[ $depth -le 1 ]]; then
+            log "aborting, can't update parent as it is a TLD: ${domain} parent:${domain_parent} depth:$depth parent_depth:$parent_depth"
+          elif [[ $depth -gt 1 ]]; then
+            find_view_from_ksk_id
+            config_init --no-log
+            if [[ $found_key == "true" ]]; then
+              log "running: ${DIR}/update"
+              "${DIR}/update" "${domain}" "${view}" "${ip_addr}" "${ns_server}" 60 "${key_id}"
+              log "$(success_icon $?) result from update was $?"
+            else
+              log "CDS Published but key was not found in any view! domain:${domain} view:${view} key:K${domain}.+014+${key_id}.key"
+            fi
           fi
         fi
       done
