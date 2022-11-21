@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# update.sh
+# updates a DS key on the parent domain based on the CDS key being published.
+# you can set env variables or pass parameters to this command
+# DOMAIN=example.com
+# KEY_ID=12345
+# VIEW=externals-master
+# $ update ${domain} ${key_id} ${view}
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ $# -lt 6 || $# -gt 6 ]]; then
+  echo "cme-dnssec-monitor/update v0.1.0 - updates CDS/DS keys in a zone"
+  echo "$@"
+  echo -e
+  echo "Usage:"
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+"
+  echo -e
+
+  echo "  examples:"
+  echo "  $ update \$domain \$view \$ip_addr \$ns_server \$ttl \$key_id"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ add test.example.com externals-master 10.0.254.2 192.168.88.2 "" 01234"
+  exit 1
+  exit 1
+fi
+
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  echo "...loading lib"
+  . "${DIR}/lib.sh"
+fi
+
+echo "add: $@"
+
+declare domain="${DOMAIN:-$1}"
+declare view="${VIEW:-$2}"
+declare ip_addr="${IP_ADDR:-$3}"
+declare ns_server="${NS_SERVER:-$4}"
+declare ttl="${TTL:-$5}"
+declare key_id="${KEY_ID:-$6}"
+declare key_path="${KEY_PATH:-${DATA_PATH}/keys}"
+declare ksk_key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
+declare domain_parent
+declare depth
+declare found_key=false
+declare ksk_file
+
+config_init
+
+log "removing old nsup"
+rm "${dsprocess_path}/${view}/nsup.${domain}"
+
+nsup_file=${dsprocess_path}/${view}/nsup.${domain}
+dsset_file=${dsprocess_path}/${view}/dsset-${view}-${domain}
+cds_file=${dsprocess_path}/${view}/file-${view}-${domain}
+
+touch "${dsprocess_path}/${view}/dsset-${view}-${domain}."
+touch "${dsprocess_path}/${view}/file-${view}-${domain}"
+touch "${dsprocess_path}/${view}/nsup.${domain}"
+
+mkdir -p "${dsprocess_path}/${view}"
+if [[ ! -f "${dsprocess_path}/${view}/dsset-${domain}." ]]; then
+  log "creating dnsec-cds DS dsset file"
+  dig -b "${ip_addr}" "@${ns_server}" +norecurse "${domain}". DNSKEY | dnssec-dsfromkey -a SHA-384 -f - "${domain}" | tee "${dsprocess_path}/${view}/dsset-${domain}." >/dev/null
+fi
+log "creating dnsec-cds CDS file"
+dig -b "${ip_addr}" "@${ns_server}" +dnssec +noall +answer "${domain}" DNSKEY "${domain}" CDNSKEY "${domain}" CDS | tee "${dsprocess_path}/${view}/file-${domain}" >/dev/null
+
+log "creating dnsec-cds nsup"
+log "$(dnssec-cds -a SHA-384 -s-86400 -T "${ttl}" -u -i -f "${dsprocess_path}/${view}/file-${domain}" -d "${dsprocess_path}/${view}" -i"orig" "${domain}" | tee "${dsprocess_path}/${view}/nsup.${domain}" >/dev/null)"
+
+log "content dnsec-cds CDS file"
+echo ${dsprocess_path}/${view}/file-${domain}
+cat ${dsprocess_path}/${view}/file-${domain}
+
+log "content dnsec-cds nsup file"
+echo ${dsprocess_path}/${view}/nsup.${domain}
+cat ${dsprocess_path}/${view}/nsup.${domain}
+
+log "thawing ${domain_parent} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
+
+log "$(
+  cat <<EOF
+nsupdate -k "${domain_key}" <<EOFT
+local ${ip_addr}
+server ${ns_server}
+zone ${domain_parent}.
+$(cat ${nsup_file})
+send
+quit
+)
+EOF
+)"
+
+nsupdate -k "${domain_key}" <<EOFT
+local ${ip_addr}
+server ${ns_server}
+zone ${domain_parent}.
+$(cat ${dsprocess_path}/${view}/nsup.${domain})
+send
+quit
+EOFT
+
+log "freezing ${domain_parent} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain_parent} in ${view}
+log "syncing ${domain_parent} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain_parent} in ${view}
+log "thawing ${domain_parent} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain_parent} in ${view}
+
+log "freezing ${domain} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain} in ${view}
+log "syncing ${domain} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" sync -clean ${domain} in ${view}
+log "thawing ${domain} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" thaw ${domain} in ${view}
+
+log "notifying ${domain_parent} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain_parent} in ${view}
+log "notifying ${DOMAIN} in ${view}"
+rndc -k "${domain_key}" -c "${domain_conf}" notify ${domain} in ${view}
+
+exit 0

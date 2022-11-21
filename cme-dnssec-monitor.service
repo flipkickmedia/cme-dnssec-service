@@ -4,7 +4,7 @@ Before=named.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/cme-dnssec-monitor/dnssec-monitor.sh
+ExecStart=/usr/local/sbin/cme-dnssec-monitor/monitor
 KillSignal=1
 WorkingDirectory=/usr/local/sbin/cme-dnssec-monitor
 KillMode=control-group

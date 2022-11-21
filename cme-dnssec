@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+# cme-dnssec
+# all things dnssec related
+
+# run update.sh with domain
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  echo "...loading lib ${DIR}/lib.sh"
+  . "${DIR}/lib.sh"
+fi
+
+# shellcheck disable=SC2153
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  echo "...loading /etc/cme/dnssec-monitor.env"
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+declare domain=$1
+declare view=$2
+
+config_init
+
