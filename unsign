@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+
+if [[ $# -lt 6 || $# -gt 6 ]]; then
+  echo -e
+  echo "cme-dnssec-monitor/unsign v0.1.0 - unsigns a zone"
+  echo -e
+  echo "Usage:"
+  echo "  ENV VARS - declare/export these env values and pass \"\" as an empty parameter
+  
+  declare -x DOMAIN=\"example.com\"
+  declare -x VIEW=\"externals-master\"
+  declare -x IP_ADDR=\"127.0.0.1\"
+  declare -x NS_SERVER=\"192.68.0.2\"
+  declare -x TTL=60
+  declare -x KEY_ID=01234
+  declare -x KEY_PATH=/var/cache/bind/keys
+  declare -x DSPROCESS_PATH=/tmp/cme/dsprocess
+"
+  echo -e
+  unsign_cmd=$(which unsign)
+  echo "  examples:"
+  echo "  $ ${unsign_cmd} \$domain \$view \$ip_addr \$ns_server"
+  echo -e
+  echo "  $ TTL=60"
+  echo "  $ update 127.0.0.1 192.168.88.2 test.com \"\" externals-master"
+  exit 1
+fi
+
+if [[ -f "/etc/cme/dnssec-monitor.env" ]]; then
+  # shellcheck disable=SC1091
+  . "/etc/cme/dnssec-monitor.env"
+fi
+
+if [[ -f "${DIR}/lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "${DIR}/lib.sh"
+fi
+
+declare domain=${DOMAIN:-$1}
+declare view=${VIEW:-$2}
+declare ip_addr=${IP_ADDR:-$3}
+declare ns_server=${NS_SERVER:-$4}
+declare ttl=${TTL:-$5}
+declare key_id=${KEY_ID:-$6}
+declare key_path
+declare dsprocess_path
+declare domain_key
+declare domain_conf
+declare domain_parent
+declare record
+
+config_init
+
+rndc -k "${domain_key}" -c "${domain_conf}" status ${domain_parent} in ${view}
+rndc -k "${domain_key}" -c "${domain_conf}" freeze ${domain_parent} in ${view}
+
+# if [[ $CME_DNSSEC_MONITOR_DEBUG -eq 1 ]]; then
+log "$(
+  cat <<EOF
+nsupdate -k "${domain_key}"
+server ${ns_server}
+zone ${domain_parent}. in ${view}
+update del ${domain}. ${ttl} DS
+send
+EOF
+)"
+# fi
+
+nsupdate_out=$(nsupdate -k "${domain_key}" < <(
+  cat <<EOF
+server ${ns_server}
+zone ${domain_parent}. in ${view}
+add ${domain}. ${ttl} DS $ds
+send
+EOF
+) 2>&1)
